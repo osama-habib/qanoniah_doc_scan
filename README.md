@@ -16,6 +16,8 @@ Spec and plan: `specs/001-document-scan/`.
   `repositoriesMode` to `FAIL_ON_PROJECT_REPOS`, add `maven { url = uri("https://jitpack.io") }`
   to the host's `settings.gradle` repositories.
 - **Toolchain**: Flutter 3.35.2 or later (`.fvmrc`).
+- **iOS Tesseract**: `ios/qanoniah_doc_scan/Frameworks/CTesseract.xcframework` is built from
+  source by `tool/build_ios_tesseract.sh` (Tesseract and Leptonica, Apache 2.0 / BSD-2).
 - **Release**: the plugin has native code, so adopting or updating it needs a full app release,
   not a Shorebird patch.
 

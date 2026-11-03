@@ -4,7 +4,7 @@
 #
 Pod::Spec.new do |s|
   s.name             = 'qanoniah_doc_scan'
-  s.version          = '0.0.1'
+  s.version          = '0.2.0'
   s.summary          = 'Qanoniah document scan: capture, review, OCR, redact, build one PDF.'
   s.description      = <<-DESC
 Qanoniah document scan: capture, review, OCR, redact, build one PDF.
@@ -15,6 +15,9 @@ Qanoniah document scan: capture, review, OCR, redact, build one PDF.
   s.source           = { :path => '.' }
   s.source_files = 'qanoniah_doc_scan/Sources/qanoniah_doc_scan/**/*'
   s.dependency 'Flutter'
+  # Tesseract 5 + Leptonica, built from source by tool/build_ios_tesseract.sh.
+  s.vendored_frameworks = 'qanoniah_doc_scan/Frameworks/CTesseract.xcframework'
+  s.libraries = 'c++'
   s.platform = :ios, '15.0'
 
   # Flutter.framework does not contain a i386 slice.

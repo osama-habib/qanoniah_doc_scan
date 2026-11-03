@@ -1,11 +1,19 @@
+import CTesseract
 import Flutter
 import UIKit
 import Vision
 
-/// Registers the iOS side of qanoniah_doc_scan: on-device text recognition with Apple
-/// Vision (research R4). No image or text leaves the device.
+/// Registers the iOS side of qanoniah_doc_scan. Everything runs on the device; no
+/// image or text leaves it.
+///
+/// - `recognize`: Apple Vision when it can read the language, otherwise Tesseract 5
+///   with the bundled tessdata_fast models (iOS 15 to 17 have no Arabic in Vision;
+///   owner decision 2026-11-03).
+/// - `detectRectangle`: Vision's rectangle detector on a live luminance frame.
 public class QanoniahDocScanPlugin: NSObject, FlutterPlugin {
-  private let queue = DispatchQueue(label: "qanoniah_doc_scan.recognition", qos: .userInitiated)
+  private let recognitionQueue = DispatchQueue(label: "qanoniah_doc_scan.recognition", qos: .userInitiated)
+  private let frameQueue = DispatchQueue(label: "qanoniah_doc_scan.frames", qos: .userInitiated)
+  private var tesseract: [String: OpaquePointer] = [:]
 
   public static func register(with registrar: FlutterPluginRegistrar) {
     let channel = FlutterMethodChannel(
@@ -14,36 +22,53 @@ public class QanoniahDocScanPlugin: NSObject, FlutterPlugin {
   }
 
   public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
-    guard call.method == "recognize",
-      let args = call.arguments as? [String: Any],
-      let path = args["path"] as? String,
-      let lang = args["lang"] as? String
-    else {
+    let args = call.arguments as? [String: Any] ?? [:]
+    switch call.method {
+    case "recognize":
+      guard let path = args["path"] as? String, let lang = args["lang"] as? String else {
+        return result(FlutterMethodNotImplemented)
+      }
+      let tessdata = args["tessdata"] as? String
+      recognitionQueue.async {
+        let payload = self.recognize(path: path, lang: lang, tessdata: tessdata)
+        DispatchQueue.main.async { result(payload) }
+      }
+    case "detectRectangle":
+      guard let data = args["bytes"] as? FlutterStandardTypedData,
+        let width = args["width"] as? Int, let height = args["height"] as? Int
+      else { return result(FlutterMethodNotImplemented) }
+      frameQueue.async {
+        let corners = Self.detectRectangle(bytes: data.data, width: width, height: height)
+        DispatchQueue.main.async { result(corners) }
+      }
+    default:
       result(FlutterMethodNotImplemented)
-      return
-    }
-    queue.async {
-      let payload = Self.recognize(path: path, language: lang == "ar" ? "ar-SA" : "en-US")
-      DispatchQueue.main.async { result(payload) }
     }
   }
 
-  /// One language per call (FR-062). Returns `unsupported` when this device's Vision
-  /// cannot read the language, so the caller keeps the page as an image only.
-  private static func recognize(path: String, language: String) -> [String: Any] {
+  // MARK: Recognition
+
+  private func recognize(path: String, lang: String, tessdata: String?) -> [String: Any] {
     guard let image = UIImage(contentsOfFile: path)?.cgImage else {
       return ["blocks": [], "paragraphs": false]
     }
+    if let vision = Self.recognizeWithVision(image, language: lang == "ar" ? "ar-SA" : "en-US") {
+      return vision
+    }
+    guard let tessdata = tessdata else { return ["unsupported": true] }
+    return recognizeWithTesseract(image, lang: lang == "ar" ? "ara" : "eng", tessdata: tessdata)
+  }
+
+  /// Nil when this device's Vision cannot read [language].
+  private static func recognizeWithVision(_ image: CGImage, language: String) -> [String: Any]? {
     let request = VNRecognizeTextRequest()
     request.recognitionLevel = .accurate
     request.usesLanguageCorrection = true
     let supported = (try? request.supportedRecognitionLanguages()) ?? []
-    guard supported.contains(language) else { return ["unsupported": true] }
+    guard supported.contains(language) else { return nil }
     request.recognitionLanguages = [language]
-
-    let handler = VNImageRequestHandler(cgImage: image, options: [:])
     do {
-      try handler.perform([request])
+      try VNImageRequestHandler(cgImage: image, options: [:]).perform([request])
     } catch {
       return ["blocks": [], "paragraphs": false]
     }
@@ -72,5 +97,92 @@ public class QanoniahDocScanPlugin: NSObject, FlutterPlugin {
       if !words.isEmpty { blocks.append(words) }
     }
     return ["blocks": blocks, "paragraphs": false]
+  }
+
+  private func engine(lang: String, tessdata: String) -> OpaquePointer? {
+    if let api = tesseract[lang] { return api }
+    guard let api = TessBaseAPICreate() else { return nil }
+    guard TessBaseAPIInit2(api, tessdata, lang, OEM_LSTM_ONLY) == 0 else {
+      TessBaseAPIDelete(api)
+      return nil
+    }
+    TessBaseAPISetPageSegMode(api, PSM_AUTO)
+    tesseract[lang] = api
+    return api
+  }
+
+  private func recognizeWithTesseract(_ image: CGImage, lang: String, tessdata: String) -> [String: Any] {
+    guard let api = engine(lang: lang, tessdata: tessdata) else { return ["unsupported": true] }
+    let width = image.width
+    let height = image.height
+    var pixels = [UInt8](repeating: 255, count: width * height)
+    let drawn: Bool = pixels.withUnsafeMutableBytes { buffer in
+      guard
+        let context = CGContext(
+          data: buffer.baseAddress, width: width, height: height, bitsPerComponent: 8,
+          bytesPerRow: width, space: CGColorSpaceCreateDeviceGray(),
+          bitmapInfo: CGImageAlphaInfo.none.rawValue)
+      else { return false }
+      context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+      return true
+    }
+    guard drawn else { return ["blocks": [], "paragraphs": false] }
+
+    var blocks: [[[String: Any]]] = []
+    pixels.withUnsafeBufferPointer { buffer in
+      TessBaseAPISetImage(api, buffer.baseAddress, Int32(width), Int32(height), 1, Int32(width))
+      guard TessBaseAPIRecognize(api, nil) == 0, let it = TessBaseAPIGetIterator(api) else { return }
+      defer { TessResultIteratorDelete(it) }
+      let page = TessResultIteratorGetPageIterator(it)
+      var line: [[String: Any]] = []
+      repeat {
+        if TessPageIteratorIsAtBeginningOf(page, RIL_TEXTLINE) != 0, !line.isEmpty {
+          blocks.append(line)
+          line = []
+        }
+        guard let cText = TessResultIteratorGetUTF8Text(it, RIL_WORD) else { continue }
+        let text = String(cString: cText)
+        TessDeleteText(cText)
+        var l: Int32 = 0, t: Int32 = 0, r: Int32 = 0, b: Int32 = 0
+        guard !text.trimmingCharacters(in: .whitespaces).isEmpty,
+          TessPageIteratorBoundingBox(page, RIL_WORD, &l, &t, &r, &b) != 0
+        else { continue }
+        line.append([
+          "text": text, "l": Double(l), "t": Double(t), "r": Double(r), "b": Double(b),
+          "c": Double(TessResultIteratorConfidence(it, RIL_WORD)) / 100,
+        ])
+      } while TessResultIteratorNext(it, RIL_WORD) != 0
+      if !line.isEmpty { blocks.append(line) }
+    }
+    TessBaseAPIClear(api)
+    return ["blocks": blocks, "paragraphs": false]
+  }
+
+  // MARK: Page edges
+
+  /// The largest page-like rectangle, as 8 normalized numbers (x, y per corner,
+  /// origin top left), or nil.
+  private static func detectRectangle(bytes: Data, width: Int, height: Int) -> [Double]? {
+    guard bytes.count >= width * height,
+      let provider = CGDataProvider(data: bytes as CFData),
+      let image = CGImage(
+        width: width, height: height, bitsPerComponent: 8, bitsPerPixel: 8, bytesPerRow: width,
+        space: CGColorSpaceCreateDeviceGray(), bitmapInfo: CGBitmapInfo(rawValue: 0),
+        provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent)
+    else { return nil }
+    let request = VNDetectRectanglesRequest()
+    request.maximumObservations = 1
+    request.minimumSize = 0.3
+    request.minimumConfidence = 0.6
+    request.minimumAspectRatio = 0.3
+    request.quadratureTolerance = 25
+    do {
+      try VNImageRequestHandler(cgImage: image, options: [:]).perform([request])
+    } catch {
+      return nil
+    }
+    guard let r = request.results?.first else { return nil }
+    let points = [r.topLeft, r.topRight, r.bottomRight, r.bottomLeft]
+    return points.flatMap { [Double($0.x), Double(1 - $0.y)] }
   }
 }

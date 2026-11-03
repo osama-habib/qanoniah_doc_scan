@@ -63,7 +63,7 @@ description: "Task list for Document Scan (001)"
 
 - [ ] T007 Spike R2. Build the example with `opencv_dart` (core and imgproc only) on iOS and Android with Flutter 3.35.2. Run Canny plus contour detection on a 640 px frame in an isolate and record the fps on a mid-range Android phone. Record the added release app size against the 12 MB budget, in `specs/001-document-scan/research.md` under R2.
 - [ ] T008 Spike R4, Android. Add `tesseract4android` to `android/build.gradle`. Confirm `TessBaseAPICreate`, `TessBaseAPIInit3`, `TessBaseAPISetImage`, `TessBaseAPIGetIterator`, and the result-iterator symbols are callable from `dart:ffi` via `DynamicLibrary.open('libtesseract.so')`. Recognize one Arabic page with `ara.traineddata` (tessdata_fast). Record the outcome and fallback decision under R4.
-- [ ] T009 Spike R4, iOS. Vendor `tesseract.xcframework` and `leptonica.xcframework` in `ios/Frameworks/`, link them in `ios/qanoniah_doc_scan.podspec`, and call the same C API via `DynamicLibrary.process()`. Record the outcome. If it fails, stop and ask the owner about the Vision-only fallback (R4).
+- [X] T009 Spike R4, iOS. Vendor `tesseract.xcframework` and `leptonica.xcframework` in `ios/Frameworks/`, link them in `ios/qanoniah_doc_scan.podspec`, and call the same C API via `DynamicLibrary.process()`. Record the outcome. If it fails, stop and ask the owner about the Vision-only fallback (R4).
 - [X] T010 Spike R7. With the `pdf` package, render one Arabic court-ruling paragraph mixing Latin article numbers, plus a «نص محجوب» bar, using Noto Sans Arabic bytes. Also render an image page with an invisible text layer and check that its text extracts. Record shaping and bidi findings under R7.
 
 ### Public types and contracts
@@ -362,7 +362,7 @@ description: "Task list for Document Scan (001)"
 **Independent Test**: Apply two filters to all pages; all change, and reset restores «الأصل».
 
 - [X] T093 [P] [US13] Add the user-visible filters to `PagePreparer` in `lib/src/page_prep/data/page_preparer.dart`, using the research R3 mapping (auto contrast, unsharp, CLAHE, gray, and reusing T036's shadow removal and adaptive threshold) applied in a fixed order; `ocrInputFile` is still produced on top.
-- [ ] T094 [P] [US13] Unit tests in `test/page_prep/page_preparer_test.dart` on a fixture image: each filter changes the output deterministically, the combination order is fixed, and «الأصل» equals the warp only.
+- [X] T094 [P] [US13] Unit tests in `test/page_prep/page_preparer_test.dart` on a fixture image: each filter changes the output deterministically, the combination order is fixed, and «الأصل» equals the warp only.
 - [X] T095 [US13] Add `setFilters(pageId | all, filters)` and `resetFilters` to `ReviewCubit`, re-preparing and re-queuing recognition. Event: `scan_filter_applied`.
 - [X] T096 [US13] Build the filters sheet in `lib/src/review/presentation/filters_sheet.dart`: the seven filter chips, «تطبيق على كل الصفحات», «إعادة الضبط», and the hint «يمكن الجمع بين أكثر من فلتر لتوضيح النص، وتُقرأ الصفحة بعد التحسين بدقة أعلى.».
 
@@ -422,14 +422,15 @@ description: "Task list for Document Scan (001)"
 
 ## Implementation notes (2026-11-03)
 
-- **R4 changed:** recognition uses one MethodChannel (`qanoniah_doc_scan/recognition`), not `dart:ffi`. Android answers with tesseract4android 4.8.0 (JitPack) through its Java API, the fallback research R4 already allowed; iOS answers with Vision. So T051 (ffi bindings) is replaced by `PlatformTextRecognizer`, and T009 (vendored iOS Tesseract) is not done: on iOS without Arabic Vision the page stays image-only (`engineUnavailable`). Owner decision still open for iOS 15 to 17.
+- **R4 changed:** recognition uses one MethodChannel (`qanoniah_doc_scan/recognition`), not `dart:ffi`. Android answers with tesseract4android 4.8.0 (JitPack) through its Java API, the fallback research R4 already allowed; iOS answers with Vision. So T051 (ffi bindings) is replaced by `PlatformTextRecognizer`. T009 is done differently: iOS without Arabic Vision uses Tesseract 5 built from source (`tool/build_ios_tesseract.sh`), owner decision 2026-11-03.
+- **R2/R3 changed:** OpenCV removed (no arm64 simulator slice, about 155 MB). Edge detection is pure Dart everywhere plus Vision rectangles on iOS; page preparation is pure Dart over `image`. T094 is now covered by `test/page_prep/page_preparer_test.dart` and `test/capture/edge_detector_test.dart`.
 - **T053:** `RecognizeDocumentsRequest` (iOS 26) is not used yet; it needs the iOS 26 SDK on CI. Vision lines are grouped into paragraphs by `PostProcessor`.
 - **PagePreparer** is a concrete class; tests implement it (no new port).
 - **R7 still open:** text-form Latin-in-Arabic ordering defect remains (pdf package). `DocScanConfig.pdfFontFallback` added (contract updated).
 - **T032/T066** are covered by `test/widgets/flow_test.dart` (full flow with fakes, cancel, second start), not in `example/`.
 - **Camera cancel never discards captured pages** (owner, 2026-11-03): with pages it opens review, with none it closes the flow. This changes FR-021 for the camera step; review and preview «إلغاء» still discard the scan.
 - **Scan in the document assistant:** shown there too, through the shared tiles (owner, 2026-11-03).
-- **Not done yet:** device spikes T007 to T009, T029 (Ahmed), T043, T048, T061, T070, T077, T083, T086, T089, T092, T094 (needs the OpenCV dylib in tests), T099, OCR gate T103 to T106 (needs the owner's page set), T108, T110 to T112, T114 to T116. Android build not verified locally: this machine has only JDK 8, 11 and 25, and Gradle 8.14 needs 17 or 21.
+- **Not done yet:** device spikes T007 to T009, T029 (Ahmed), T043, T048, T061, T070, T077, T083, T086, T089, T092, T099, OCR gate T103 to T106 (needs the owner's page set), T108, T110 to T112, T114 to T116. Android build not verified locally: this machine has only JDK 8, 11 and 25, and Gradle 8.14 needs 17 or 21.
 
 ## Dependencies & Execution Order
 

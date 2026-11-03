@@ -34,3 +34,6 @@ migrate_working_dir/
 
 # fvm
 .fvm/
+
+# Native build workspaces.
+tool/.build/

@@ -85,7 +85,7 @@ class ScanFlowDeps {
     sessions: ScanSessionRepo(),
     recognizer: PlatformTextRecognizer(),
     newCamera: CameraPluginSource.new,
-    newEdgeDetector: OpenCvEdgeDetector.new,
+    newEdgeDetector: () => Platform.isIOS ? VisionEdgeDetector() : DartEdgeDetector(),
     permissions: const PermissionRepo(),
     preparer: const PagePreparer(),
   );

@@ -13,9 +13,11 @@ let package = Package(
     ],
     dependencies: [],
     targets: [
+        // Tesseract 5 + Leptonica, built from source by tool/build_ios_tesseract.sh.
+        .binaryTarget(name: "CTesseract", path: "Frameworks/CTesseract.xcframework"),
         .target(
             name: "qanoniah_doc_scan",
-            dependencies: [],
+            dependencies: ["CTesseract"],
             resources: [
                 // If your plugin requires a privacy manifest, for example if it uses any required
                 // reason APIs, update the PrivacyInfo.xcprivacy file to describe your plugin's
@@ -26,7 +28,8 @@ let package = Package(
                 // If you have other resources that need to be bundled with your plugin, refer to
                 // the following instructions to add them:
                 // https://developer.apple.com/documentation/xcode/bundling-resources-with-a-swift-package
-            ]
+            ],
+            linkerSettings: [.linkedLibrary("c++")]
         )
     ]
 )

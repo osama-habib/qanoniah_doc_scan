@@ -84,7 +84,8 @@ class CameraPluginSource implements CameraSource {
   Future<void> _open() async {
     final CameraController c = CameraController(
       _description!,
-      ResolutionPreset.max,
+      // 1080p is enough for an A4 page and keeps Dart decoding fast.
+      ResolutionPreset.veryHigh,
       enableAudio: false,
       imageFormatGroup: ImageFormatGroup.yuv420,
     );

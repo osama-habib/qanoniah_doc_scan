@@ -10,8 +10,9 @@ import 'text_recognizer.dart';
 
 /// [TextRecognizer] over the plugin's native channel (research R4).
 ///
-/// iOS answers with Apple Vision when it supports the language; Android answers with
-/// Tesseract (tesseract4android) reading the bundled tessdata_fast models. The model
+/// iOS answers with Apple Vision when it supports the language and with Tesseract 5
+/// otherwise; Android answers with Tesseract (tesseract4android). Both Tesseracts
+/// read the bundled tessdata_fast models. The model
 /// files are package assets, copied once to app-support storage because Tesseract
 /// reads from a path, so a model update is an asset swap (FR-053).
 class PlatformTextRecognizer implements TextRecognizer {
@@ -36,7 +37,9 @@ class PlatformTextRecognizer implements TextRecognizer {
         <String, Object?>{
           'path': image.path,
           'lang': language.name,
-          if (Platform.isAndroid) 'tessdata': await _ensureTessdata(),
+          // Android always reads with Tesseract; iOS falls back to it when Vision
+          // cannot read the language (iOS 15 to 17 for Arabic).
+          'tessdata': await _ensureTessdata(),
         },
       );
       if (res == null) return const Left<RecognitionFailure, RawRecognition>(RecognitionFailure.failed());

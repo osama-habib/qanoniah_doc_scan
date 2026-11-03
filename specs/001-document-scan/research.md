@@ -20,6 +20,8 @@ anything builds on them.
   - Pure-Dart `image` package: too slow for live frames.
 - **Spike**: `opencv_dart` must build with Flutter 3.35 on both platforms using the classic FFI plugin build (pin the 1.4.x line, not the native-assets 2.x line), with only the `core` and `imgproc` modules. Measure the added app size; budget is 12 MB per platform.
 
+- **Revised 2026-11-03 (owner):** `opencv_dart` 1.4.5 was dropped. Its iOS static library has no arm64 simulator slice (it forces `EXCLUDED_ARCHS[sdk=iphonesimulator*]=arm64` on the whole host app, so the app stopped running on Apple-silicon simulators) and it is about 155 MB of static code with modules we do not use. Replaced by `DartEdgeDetector` (pure Dart: Otsu threshold on a 160 px copy, largest bright component, its four extreme corners, accepted when it fills its quadrilateral) on every platform, and `VisionEdgeDetector` (`VNDetectRectanglesRequest`) on iOS. Both share `frameStats` for sharpness and light.
+
 ## R3. Page preparation layer (FR-051 layer 1, story 13 filters)
 
 - **Decision**: All in Dart over `opencv_dart`. Perspective warp to the detected or adjusted corners, deskew, shadow removal (divide by a morphological-closing background estimate), and adaptive binarization. The design's filters map onto these operations:
@@ -33,6 +35,8 @@ anything builds on them.
   | «تباين عالٍ» | CLAHE |
   | «رمادي» | grayscale |
   | «أبيض وأسود» | adaptive threshold |
+
+  Revised 2026-11-03: implemented in pure Dart over the `image` package (`copyRectify`, normalize, contrast, a sharpen kernel, grayscale, a background-division shadow remover and an integral-image adaptive threshold). «تباين عالٍ» is a global contrast boost, not CLAHE.
 
   Filters combine in a fixed order. Recognition runs on `ocrInputFile`: the prepared image with shadow removal and binarization always applied on top of the user's filters. It is hidden and never goes into the PDF.
 - **Rationale**: The same operations serve the filters (shown to the user) and the recognition input (hidden). This is one pipeline, not two.
@@ -53,6 +57,7 @@ anything builds on them.
   - Confirm the Tesseract C API symbols (`TessBaseAPICreate`, …) are exported from the tesseract4android `.so`, and that the xcframework links in the pod.
   - Fallback if the Android `.so` lacks them: a thin Kotlin channel to tesseract4android's Java API.
   - Fallback if the iOS build fails: Vision only on iOS, and the host hides the scan card where Arabic Vision is unavailable. That fallback would be a product decision for the owner.
+- **Revised 2026-11-03 (owner):** iOS without Arabic Vision (iOS 15 to 17) now falls back to Tesseract 5.5.3 + Leptonica 1.86.0, built from the official sources by `tool/build_ios_tesseract.sh` into `ios/qanoniah_doc_scan/Frameworks/CTesseract.xcframework` (arm64 device and arm64 simulator, about 16 MB), called through the C API from Swift. Android stays on tesseract4android over the same channel; no `dart:ffi`.
 - **Model assets**: `.traineddata` files ship as package assets under `assets/tessdata/`. On first use they are copied into app-support storage, because Tesseract reads from a path. Swapping the file is the whole model update (FR-053).
 
 ## R5. Language per page (FR-062)
