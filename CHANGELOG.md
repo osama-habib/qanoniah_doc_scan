@@ -1,3 +1,12 @@
+## 0.3.0
+
+* Text-form PDF (after an edit or redaction) is laid out by each platform's own text engine:
+  TextKit/CoreText on iOS, StaticLayout + PdfDocument on Android. English inside Arabic keeps
+  its order, and digits, `%` and brackets render correctly. Falls back to the `pdf` package
+  when the native side is missing.
+* Android: JitPack is added for every project, so hosts need no repository change for
+  tesseract4android.
+
 ## 0.2.0
 
 * OpenCV removed: it had no arm64 iOS simulator build (the host app stopped running on

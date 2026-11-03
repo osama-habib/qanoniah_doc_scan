@@ -14,11 +14,12 @@ buildscript {
     }
 }
 
-allprojects {
+// tesseract4android is published on JitPack only (research R4). Added to every
+// project, so the host app's classpath resolves it without host changes.
+rootProject.allprojects {
     repositories {
         google()
         mavenCentral()
-        // tesseract4android is published on JitPack only (research R4).
         maven { url = uri("https://jitpack.io") }
     }
 }

@@ -93,6 +93,11 @@ anything builds on them.
   - The same defects apply to the host's existing canvas PDF export, which uses the same package.
   - **Owner decision (2026-11-02): C then A.** First ask the backend team how `/agent-attachment-upload` reads a PDF's text (text-layer extraction, and with which library, or OCR). If the server extracts the text layer, build the PDF with each platform's own text engine (CoreText via `UIGraphicsPDFRenderer` on iOS, `PdfDocument` with `StaticLayout` on Android) behind one `PdfRenderer` port. That port is a platform seam allowed by P5. Phases 6 and 9 (PDF building) wait for the backend answer.
 
+- **Done 2026-11-03 (owner chose A without waiting for the backend):** text form goes through `TextPdfRenderer`, a platform port: TextKit/CoreText on iOS (`TextPdfRenderer.swift`), `StaticLayout` + `PdfDocument` on Android (`TextPdfRenderer.kt`), with the `pdf`-package renderer as fallback and in tests. Redactions reach the platform as markers only.
+  - Checked on the iOS 26 simulator: Latin runs, digits, `%` and parentheses keep their order and shaping.
+  - **Text layer with Noto Sans Arabic is still not readable**: Noto builds Arabic letters from a dotless base plus separate dot glyphs, and every extractor tried (PDFKit, pdfminer, pypdf) maps them back wrongly (`وڡ#ٯ%` for «وفق»). With the iOS system font Geeza Pro, PDFKit extracts the same page correctly. The owner kept Noto (2026-11-03). Open: whether the server reads the PDF text layer or OCRs it; if it reads the layer, send `pageTexts` with the upload or revisit the font.
+  - Image form still uses the `pdf` package for its invisible text layer.
+
 ## R8. Read-only viewer (story 10)
 
 - **Decision**: `DocScanViewer` rasterizes the returned PDF with `printing` (`Printing.raster`, from the same author as `pdf`). It uses the platform's own PDF renderer, so no pdfium binary is added. The viewer shows the pages with no tools.

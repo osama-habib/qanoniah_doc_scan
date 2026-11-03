@@ -18,6 +18,8 @@ import java.util.concurrent.Executors
  */
 class QanoniahDocScanPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
     private lateinit var channel: MethodChannel
+    private lateinit var pdfChannel: MethodChannel
+    private lateinit var cacheDir: java.io.File
     private val worker = Executors.newSingleThreadExecutor()
     private val main = Handler(Looper.getMainLooper())
     private val engines = mutableMapOf<String, TessBaseAPI>()
@@ -25,10 +27,27 @@ class QanoniahDocScanPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         channel = MethodChannel(binding.binaryMessenger, "qanoniah_doc_scan/recognition")
         channel.setMethodCallHandler(this)
+        cacheDir = binding.applicationContext.cacheDir
+        pdfChannel = MethodChannel(binding.binaryMessenger, "qanoniah_doc_scan/pdf")
+        pdfChannel.setMethodCallHandler { call, result ->
+            if (call.method != "renderText") return@setMethodCallHandler result.notImplemented()
+            val args = call.arguments as? Map<*, *> ?: return@setMethodCallHandler result.notImplemented()
+            worker.execute {
+                val pdf = try {
+                    TextPdfRenderer.render(args, cacheDir)
+                } catch (e: Exception) {
+                    null
+                }
+                main.post {
+                    if (pdf != null) result.success(pdf) else result.error("render_failed", null, null)
+                }
+            }
+        }
     }
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         channel.setMethodCallHandler(null)
+        pdfChannel.setMethodCallHandler(null)
         worker.execute {
             engines.values.forEach { it.recycle() }
             engines.clear()

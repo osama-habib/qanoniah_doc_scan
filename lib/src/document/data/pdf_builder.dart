@@ -13,6 +13,9 @@ import '../../core/doc_scan_result.dart';
 import '../../core/failures.dart';
 import '../../core/session/document_edits.dart';
 import '../../core/session/scan_session.dart';
+import 'text_pdf_renderer.dart';
+
+export 'text_pdf_renderer.dart' show PdfTextBlock;
 
 /// What [PdfBuilder] wrote (data-model BuildOutput).
 @immutable
@@ -76,7 +79,9 @@ class PdfLook {
 ///   content cannot survive in pixels, and redacted characters never reach the PDF
 ///   (FR-041, FR-042).
 class PdfBuilder {
-  const PdfBuilder();
+  const PdfBuilder({TextPdfRenderer textRenderer = const PdfPackageTextRenderer()}) : _textRenderer = textRenderer;
+
+  final TextPdfRenderer _textRenderer;
 
   static const double _pageWidth = 595; // A4 width in points.
 
@@ -129,20 +134,20 @@ class PdfBuilder {
     required File out,
   }) async {
     try {
-      final List<List<_TextBlock>> content = <List<_TextBlock>>[
+      final List<List<PdfTextBlock>> content = <List<PdfTextBlock>>[
         for (final CapturedPage p in pages)
           switch (p.recognition) {
-            RecognitionDone(:final PageText text) => <_TextBlock>[
+            RecognitionDone(:final PageText text) => <PdfTextBlock>[
               for (final Paragraph para in text.paragraphs)
-                _TextBlock(
+                PdfTextBlock(
                   rtl: text.language == RecognitionLanguage.ar,
                   segments: edits.finalSegments(p.id, para),
                 ),
             ],
-            _ => const <_TextBlock>[],
+            _ => const <PdfTextBlock>[],
           },
       ];
-      final Uint8List bytes = await _textPdf(content, look);
+      final Uint8List bytes = await _textRenderer.render(content, look);
       await out.writeAsBytes(bytes, flush: true);
       return Right<BuildFailure, BuildOutput>(
         BuildOutput(file: out, form: DocScanPdfForm.text, sizeBytes: bytes.length, compressed: false),
@@ -157,71 +162,6 @@ class PdfBuilder {
   static BuildFailure _storage(FileSystemException e) =>
       e.osError?.errorCode == 28 ? const BuildFailure.storageFull() : const BuildFailure.unknown();
 
-  static Future<Uint8List> _textPdf(List<List<_TextBlock>> pages, PdfLook look) {
-    final pw.Font base = pw.Font.ttf(ByteData.sublistView(look.font));
-    final pw.Font fallback = pw.Font.ttf(ByteData.sublistView(look.fontFallback));
-    final Uint8List? boldBytes = look.fontBold;
-    final pw.ThemeData theme = pw.ThemeData.withFont(
-      base: base,
-      bold: boldBytes == null ? base : pw.Font.ttf(ByteData.sublistView(boldBytes)),
-      fontFallback: <pw.Font>[fallback],
-    );
-    final PdfColor ink = PdfColor.fromInt(look.text);
-    final PdfColor fill = PdfColor.fromInt(look.redactionFill);
-    final PdfColor onFill = PdfColor.fromInt(look.onRedactionFill);
-    final pw.Document doc = pw.Document(theme: theme);
-    for (final List<_TextBlock> blocks in pages) {
-      doc.addPage(
-        pw.MultiPage(
-          pageFormat: PdfPageFormat.a4.applyMargin(left: 48, top: 56, right: 48, bottom: 56),
-          textDirection: pw.TextDirection.rtl,
-          build: (pw.Context _) => <pw.Widget>[
-            for (final _TextBlock b in blocks) _paragraph(b, ink, fill, onFill, look.redactedLabel),
-          ],
-        ),
-      );
-    }
-    if (pages.every((List<_TextBlock> b) => b.isEmpty)) {
-      doc.addPage(pw.Page(build: (pw.Context _) => pw.SizedBox()));
-    }
-    return doc.save();
-  }
-
-  static pw.Widget _paragraph(_TextBlock b, PdfColor ink, PdfColor fill, PdfColor onFill, String label) {
-    final pw.TextDirection dir = b.rtl ? pw.TextDirection.rtl : pw.TextDirection.ltr;
-    final pw.Widget body;
-    if (b.segments.length == 1 && b.segments.first is FinalRedaction) {
-      body = pw.Container(
-        width: double.infinity,
-        padding: const pw.EdgeInsets.symmetric(vertical: 8, horizontal: 12),
-        decoration: pw.BoxDecoration(color: fill, borderRadius: pw.BorderRadius.circular(4)),
-        child: pw.Text(label, textDirection: pw.TextDirection.rtl, style: pw.TextStyle(color: onFill, fontSize: 11)),
-      );
-    } else {
-      body = pw.RichText(
-        textDirection: dir,
-        textAlign: b.rtl ? pw.TextAlign.right : pw.TextAlign.left,
-        text: pw.TextSpan(
-          style: pw.TextStyle(color: ink, fontSize: 12, lineSpacing: 4),
-          children: <pw.InlineSpan>[
-            for (final FinalSegment s in b.segments)
-              switch (s) {
-                FinalText(:final String text) => pw.TextSpan(text: '$text '),
-                FinalRedaction() => pw.WidgetSpan(
-                  child: pw.Container(
-                    width: 36,
-                    height: 11,
-                    margin: const pw.EdgeInsets.symmetric(horizontal: 2),
-                    decoration: pw.BoxDecoration(color: fill, borderRadius: pw.BorderRadius.circular(2)),
-                  ),
-                ),
-              },
-          ],
-        ),
-      );
-    }
-    return pw.Padding(padding: const pw.EdgeInsets.only(bottom: 10), child: body);
-  }
 }
 
 class _ImagePage {
@@ -229,12 +169,6 @@ class _ImagePage {
   final String path;
   final List<(String, Rect)> words;
   final bool rtl;
-}
-
-class _TextBlock {
-  const _TextBlock({required this.rtl, required this.segments});
-  final bool rtl;
-  final List<FinalSegment> segments;
 }
 
 /// Runs in an isolate: re-encodes each photo and lays out the image-form PDF.

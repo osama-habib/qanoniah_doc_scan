@@ -12,9 +12,9 @@ Spec and plan: `specs/001-document-scan/`.
 - **Android**: declare `<uses-permission android:name="android.permission.CAMERA" />`. Minimum API 26.
 - **iOS Podfile**: `permission_handler` needs `'PERMISSION_CAMERA=1'` in
   `GCC_PREPROCESSOR_DEFINITIONS`, and every pod at `IPHONEOS_DEPLOYMENT_TARGET = 15.0`.
-- **Android repositories**: tesseract4android comes from JitPack. If the host sets
-  `repositoriesMode` to `FAIL_ON_PROJECT_REPOS`, add `maven { url = uri("https://jitpack.io") }`
-  to the host's `settings.gradle` repositories.
+- **Android repositories**: tesseract4android comes from JitPack, which the plugin adds to
+  every project. If the host sets `repositoriesMode` to `FAIL_ON_PROJECT_REPOS`, add
+  `maven { url = uri("https://jitpack.io") }` to the host's `settings.gradle` instead.
 - **Toolchain**: Flutter 3.35.2 or later (`.fvmrc`).
 - **iOS Tesseract**: `ios/qanoniah_doc_scan/Frameworks/CTesseract.xcframework` is built from
   source by `tool/build_ios_tesseract.sh` (Tesseract and Leptonica, Apache 2.0 / BSD-2).

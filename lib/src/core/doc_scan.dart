@@ -12,6 +12,7 @@ import '../capture/manager/capture_cubit.dart';
 import '../capture/presentation/camera_sheet.dart';
 import '../document/data/pdf_builder.dart';
 import '../document/data/size_fitter.dart';
+import '../document/data/text_pdf_renderer.dart';
 import '../document/manager/build_cubit.dart';
 import '../document/manager/preview_cubit.dart';
 import '../document/presentation/build_screen.dart';
@@ -88,6 +89,7 @@ class ScanFlowDeps {
     newEdgeDetector: () => Platform.isIOS ? VisionEdgeDetector() : DartEdgeDetector(),
     permissions: const PermissionRepo(),
     preparer: const PagePreparer(),
+    builder: PdfBuilder(textRenderer: PlatformTextPdfRenderer(fallback: const PdfPackageTextRenderer())),
   );
 
   final ScanSessionRepo sessions;
