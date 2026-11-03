@@ -52,6 +52,9 @@ class DocScanStrings {
     required this.filtersPanelTitle,
     required this.next,
     required this.pageOf,
+    required this.saveCount,
+    required this.pageShort,
+    required this.allPages,
     required this.filtersHint,
     required this.filterOriginal,
     required this.filterAuto,
@@ -147,6 +150,15 @@ class DocScanStrings {
 
   /// «صفحة 2 / 5».
   final String Function(int number, int total) pageOf;
+
+  /// «حفظ (N)» on the camera.
+  final String Function(int count) saveCount;
+
+  /// «صفحة N» under a review tile.
+  final String Function(int number) pageShort;
+
+  /// «كل الصفحات»: the preview's page sidebar.
+  final String allPages;
   final String filtersHint;
   final String filterOriginal;
   final String filterAuto;
@@ -223,8 +235,7 @@ class DocScanStrings {
       // TODO(ahmed): pending UX approval
       announcePageSteady: 'الصفحة ثابتة، جارٍ الالتقاط',
       // TODO(ahmed): pending UX approval
-      announcePageCaptured: (int count) =>
-          'تم التقاط الصفحة. ${_arPages(count)}',
+      announcePageCaptured: (int count) => 'تم التقاط الصفحة. ${_arPages(count)}',
       // TODO(ahmed): pending UX approval
       pageLimitReached: (int max) => 'وصلت إلى الحد الأقصى: ${_arPages(max)}',
       // TODO(ahmed): pending UX approval
@@ -252,8 +263,10 @@ class DocScanStrings {
       filtersPanelTitle: 'الفلاتر',
       next: 'التالي',
       pageOf: (int n, int total) => 'صفحة $n / $total',
-      filtersHint:
-          'يمكن الجمع بين أكثر من فلتر لتوضيح النص، وتُقرأ الصفحة بعد التحسين بدقة أعلى.',
+      saveCount: (int n) => 'حفظ ($n)',
+      pageShort: (int n) => 'صفحة $n',
+      allPages: 'كل الصفحات',
+      filtersHint: 'يمكن الجمع بين أكثر من فلتر لتوضيح النص، وتُقرأ الصفحة بعد التحسين بدقة أعلى.',
       filterOriginal: 'الأصل',
       filterAuto: 'تحسين تلقائي',
       filterText: 'إبراز النص',
@@ -338,8 +351,7 @@ class DocScanStrings {
       pageCount: _enPages,
       deletePage: 'Delete page',
       deletePageTitle: (int number) => 'Delete page $number?',
-      deletePageBody:
-          'The image will be removed from this scan and not added to the file.',
+      deletePageBody: 'The image will be removed from this scan and not added to the file.',
       deleteConfirm: 'Delete',
       cornersTitle: 'Page corners',
       cornersHint: 'Drag the corners to adjust the page edges',
@@ -349,8 +361,10 @@ class DocScanStrings {
       filtersPanelTitle: 'Filters',
       next: 'Next',
       pageOf: (int n, int total) => 'Page $n / $total',
-      filtersHint:
-          'Combine filters to make text clearer. The page is read more accurately after enhancing.',
+      saveCount: (int n) => 'Save ($n)',
+      pageShort: (int n) => 'Page $n',
+      allPages: 'All pages',
+      filtersHint: 'Combine filters to make text clearer. The page is read more accurately after enhancing.',
       filterOriginal: 'Original',
       filterAuto: 'Auto enhance',
       filterText: 'Sharpen text',
@@ -390,8 +404,7 @@ class DocScanStrings {
       rename: 'Rename document',
       renameSave: 'Save',
       attach: 'Attach as PDF',
-      attachNote:
-          'Pages are merged into one PDF and its text is read before answering.',
+      attachNote: 'Pages are merged into one PDF and its text is read before answering.',
       sizeLimit: (double size, double limit) =>
           'The file is ${size.toStringAsFixed(1)} MB and the limit is '
           '${limit.toStringAsFixed(0)} MB. Remove some pages and try again.',
@@ -441,6 +454,9 @@ class DocScanStrings {
     String? filtersPanelTitle,
     String? next,
     String Function(int number, int total)? pageOf,
+    String Function(int count)? saveCount,
+    String Function(int number)? pageShort,
+    String? allPages,
     String? filtersHint,
     String? filterOriginal,
     String? filterAuto,
@@ -503,10 +519,8 @@ class DocScanStrings {
       announcePageSteady: announcePageSteady ?? this.announcePageSteady,
       announcePageCaptured: announcePageCaptured ?? this.announcePageCaptured,
       pageLimitReached: pageLimitReached ?? this.pageLimitReached,
-      cameraPermissionTitle:
-          cameraPermissionTitle ?? this.cameraPermissionTitle,
-      cameraPermissionRetry:
-          cameraPermissionRetry ?? this.cameraPermissionRetry,
+      cameraPermissionTitle: cameraPermissionTitle ?? this.cameraPermissionTitle,
+      cameraPermissionRetry: cameraPermissionRetry ?? this.cameraPermissionRetry,
       openSettings: openSettings ?? this.openSettings,
       reviewPages: reviewPages ?? this.reviewPages,
       reorderHint: reorderHint ?? this.reorderHint,
@@ -529,6 +543,9 @@ class DocScanStrings {
       filtersPanelTitle: filtersPanelTitle ?? this.filtersPanelTitle,
       next: next ?? this.next,
       pageOf: pageOf ?? this.pageOf,
+      saveCount: saveCount ?? this.saveCount,
+      pageShort: pageShort ?? this.pageShort,
+      allPages: allPages ?? this.allPages,
       filtersHint: filtersHint ?? this.filtersHint,
       filterOriginal: filterOriginal ?? this.filterOriginal,
       filterAuto: filterAuto ?? this.filterAuto,

@@ -7,6 +7,8 @@ import '../../core/presentation/scan_widgets.dart';
 import '../../core/session/scan_session.dart';
 import '../manager/preview_cubit.dart';
 
+// TODO(unused): the design shows photos as paper pages (_PhotoPage in
+// preview_screen.dart) and has no text/photo toggle.
 /// The page photo with «لون المسح» (story 14). No edit tools here.
 class PhotoView extends StatelessWidget {
   const PhotoView({super.key, required this.page, required this.strings});

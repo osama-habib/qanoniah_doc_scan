@@ -36,6 +36,11 @@ mixin _$CaptureState {
   /// Replace mode only: the replacement was taken, so the flow returns to review.
   bool get replaced => throw _privateConstructorUsedError;
 
+  /// Manual capture: the photo waiting for «حفظ الصفحة» or «إعادة الالتقاط»,
+  /// with the corners found on it (design `scanAdj`).
+  File? get adjustFile => throw _privateConstructorUsedError;
+  Quad? get adjustQuad => throw _privateConstructorUsedError;
+
   /// Create a copy of CaptureState
   /// with the given fields replaced by the non-null parameter values.
   @JsonKey(includeFromJson: false, includeToJson: false)
@@ -62,9 +67,12 @@ abstract class $CaptureStateCopyWith<$Res> {
     bool limitReached,
     bool storageFull,
     bool replaced,
+    File? adjustFile,
+    Quad? adjustQuad,
   });
 
   $QuadCopyWith<$Res>? get quad;
+  $QuadCopyWith<$Res>? get adjustQuad;
 }
 
 /// @nodoc
@@ -93,6 +101,8 @@ class _$CaptureStateCopyWithImpl<$Res, $Val extends CaptureState>
     Object? limitReached = null,
     Object? storageFull = null,
     Object? replaced = null,
+    Object? adjustFile = freezed,
+    Object? adjustQuad = freezed,
   }) {
     return _then(
       _value.copyWith(
@@ -140,6 +150,14 @@ class _$CaptureStateCopyWithImpl<$Res, $Val extends CaptureState>
                 ? _value.replaced
                 : replaced // ignore: cast_nullable_to_non_nullable
                       as bool,
+            adjustFile: freezed == adjustFile
+                ? _value.adjustFile
+                : adjustFile // ignore: cast_nullable_to_non_nullable
+                      as File?,
+            adjustQuad: freezed == adjustQuad
+                ? _value.adjustQuad
+                : adjustQuad // ignore: cast_nullable_to_non_nullable
+                      as Quad?,
           )
           as $Val,
     );
@@ -156,6 +174,20 @@ class _$CaptureStateCopyWithImpl<$Res, $Val extends CaptureState>
 
     return $QuadCopyWith<$Res>(_value.quad!, (value) {
       return _then(_value.copyWith(quad: value) as $Val);
+    });
+  }
+
+  /// Create a copy of CaptureState
+  /// with the given fields replaced by the non-null parameter values.
+  @override
+  @pragma('vm:prefer-inline')
+  $QuadCopyWith<$Res>? get adjustQuad {
+    if (_value.adjustQuad == null) {
+      return null;
+    }
+
+    return $QuadCopyWith<$Res>(_value.adjustQuad!, (value) {
+      return _then(_value.copyWith(adjustQuad: value) as $Val);
     });
   }
 }
@@ -181,10 +213,14 @@ abstract class _$$CaptureStateImplCopyWith<$Res>
     bool limitReached,
     bool storageFull,
     bool replaced,
+    File? adjustFile,
+    Quad? adjustQuad,
   });
 
   @override
   $QuadCopyWith<$Res>? get quad;
+  @override
+  $QuadCopyWith<$Res>? get adjustQuad;
 }
 
 /// @nodoc
@@ -212,6 +248,8 @@ class __$$CaptureStateImplCopyWithImpl<$Res>
     Object? limitReached = null,
     Object? storageFull = null,
     Object? replaced = null,
+    Object? adjustFile = freezed,
+    Object? adjustQuad = freezed,
   }) {
     return _then(
       _$CaptureStateImpl(
@@ -259,6 +297,14 @@ class __$$CaptureStateImplCopyWithImpl<$Res>
             ? _value.replaced
             : replaced // ignore: cast_nullable_to_non_nullable
                   as bool,
+        adjustFile: freezed == adjustFile
+            ? _value.adjustFile
+            : adjustFile // ignore: cast_nullable_to_non_nullable
+                  as File?,
+        adjustQuad: freezed == adjustQuad
+            ? _value.adjustQuad
+            : adjustQuad // ignore: cast_nullable_to_non_nullable
+                  as Quad?,
       ),
     );
   }
@@ -279,6 +325,8 @@ class _$CaptureStateImpl implements _CaptureState {
     this.limitReached = false,
     this.storageFull = false,
     this.replaced = false,
+    this.adjustFile,
+    this.adjustQuad,
   });
 
   @override
@@ -316,9 +364,16 @@ class _$CaptureStateImpl implements _CaptureState {
   @JsonKey()
   final bool replaced;
 
+  /// Manual capture: the photo waiting for «حفظ الصفحة» or «إعادة الالتقاط»,
+  /// with the corners found on it (design `scanAdj`).
+  @override
+  final File? adjustFile;
+  @override
+  final Quad? adjustQuad;
+
   @override
   String toString() {
-    return 'CaptureState(phase: $phase, mode: $mode, quad: $quad, hint: $hint, pageCount: $pageCount, capturing: $capturing, shots: $shots, lastThumbnail: $lastThumbnail, limitReached: $limitReached, storageFull: $storageFull, replaced: $replaced)';
+    return 'CaptureState(phase: $phase, mode: $mode, quad: $quad, hint: $hint, pageCount: $pageCount, capturing: $capturing, shots: $shots, lastThumbnail: $lastThumbnail, limitReached: $limitReached, storageFull: $storageFull, replaced: $replaced, adjustFile: $adjustFile, adjustQuad: $adjustQuad)';
   }
 
   @override
@@ -342,7 +397,11 @@ class _$CaptureStateImpl implements _CaptureState {
             (identical(other.storageFull, storageFull) ||
                 other.storageFull == storageFull) &&
             (identical(other.replaced, replaced) ||
-                other.replaced == replaced));
+                other.replaced == replaced) &&
+            (identical(other.adjustFile, adjustFile) ||
+                other.adjustFile == adjustFile) &&
+            (identical(other.adjustQuad, adjustQuad) ||
+                other.adjustQuad == adjustQuad));
   }
 
   @override
@@ -359,6 +418,8 @@ class _$CaptureStateImpl implements _CaptureState {
     limitReached,
     storageFull,
     replaced,
+    adjustFile,
+    adjustQuad,
   );
 
   /// Create a copy of CaptureState
@@ -383,6 +444,8 @@ abstract class _CaptureState implements CaptureState {
     final bool limitReached,
     final bool storageFull,
     final bool replaced,
+    final File? adjustFile,
+    final Quad? adjustQuad,
   }) = _$CaptureStateImpl;
 
   @override
@@ -414,6 +477,13 @@ abstract class _CaptureState implements CaptureState {
   /// Replace mode only: the replacement was taken, so the flow returns to review.
   @override
   bool get replaced;
+
+  /// Manual capture: the photo waiting for «حفظ الصفحة» or «إعادة الالتقاط»,
+  /// with the corners found on it (design `scanAdj`).
+  @override
+  File? get adjustFile;
+  @override
+  Quad? get adjustQuad;
 
   /// Create a copy of CaptureState
   /// with the given fields replaced by the non-null parameter values.

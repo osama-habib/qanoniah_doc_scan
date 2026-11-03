@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import '../../core/scan_metrics.dart';
 import '../../core/doc_scan_theme.dart';
 
 /// A short white flash each time [shots] changes (story 2).
@@ -40,8 +41,9 @@ class _CaptureFlashState extends State<CaptureFlash> with SingleTickerProviderSt
   );
 }
 
-/// The last page's thumbnail with the page count; each new shot pops in, like it
-/// flew down from the viewfinder.
+/// Two stacked sheets with the page count (design camera bottom bar): the top
+/// sheet shows the last page, and each new shot pops in, like it flew down from
+/// the viewfinder.
 class PageThumbnailBadge extends StatelessWidget {
   const PageThumbnailBadge({
     super.key,
@@ -58,11 +60,17 @@ class PageThumbnailBadge extends StatelessWidget {
   final String label;
   final VoidCallback? onTap;
 
+  // Design: 46 by 60 sheets, the back one turned -6°, a 22 high count badge.
+  static const double _width = 46;
+  static const double _height = 60;
+  static const double _badge = 22;
+
   @override
   Widget build(BuildContext context) {
     final DocScanTheme t = DocScanTheme.of(context);
     final File? f = file;
-    if (f == null || count == 0) return SizedBox.square(dimension: t.thumbnailSize);
+    if (f == null || count == 0) return const SizedBox(width: _width, height: _height);
+    final BorderRadius r = ScanMetrics.radius(4);
     return Semantics(
       button: true,
       label: label,
@@ -70,33 +78,69 @@ class PageThumbnailBadge extends StatelessWidget {
       excludeSemantics: true,
       child: GestureDetector(
         onTap: onTap,
-        child: SizedBox.square(
-          dimension: t.thumbnailSize,
+        child: SizedBox(
+          width: _width,
+          height: _height,
           child: Stack(
             clipBehavior: Clip.none,
             children: <Widget>[
               Positioned.fill(
+                child: Transform.rotate(
+                  angle: -6 * 3.14159265 / 180,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(color: t.surfaceSecondary, borderRadius: r),
+                  ),
+                ),
+              ),
+              Positioned.fill(
                 child: AnimatedSwitcher(
                   duration: const Duration(milliseconds: 320),
                   transitionBuilder: (Widget child, Animation<double> a) => SlideTransition(
-                    position: Tween<Offset>(begin: const Offset(0, -2.5), end: Offset.zero)
-                        .animate(CurvedAnimation(parent: a, curve: Curves.easeOutCubic)),
+                    position: Tween<Offset>(
+                      begin: const Offset(0, -2.5),
+                      end: Offset.zero,
+                    ).animate(CurvedAnimation(parent: a, curve: Curves.easeOutCubic)),
                     child: ScaleTransition(scale: Tween<double>(begin: 1.8, end: 1).animate(a), child: child),
                   ),
-                  child: ClipRRect(
+                  child: Container(
                     key: ValueKey<int>(shots),
-                    borderRadius: BorderRadius.circular(t.radiusSm),
-                    child: Image.file(f, fit: BoxFit.cover, cacheWidth: 160),
+                    decoration: BoxDecoration(
+                      color: t.surface,
+                      borderRadius: r,
+                      boxShadow: <BoxShadow>[
+                        BoxShadow(color: t.scrim.withValues(alpha: 0.35), blurRadius: 10, offset: const Offset(0, 4)),
+                      ],
+                    ),
+                    child: ClipRRect(
+                      borderRadius: r,
+                      child: Image.file(f, fit: BoxFit.cover, cacheWidth: 160),
+                    ),
                   ),
                 ),
               ),
               PositionedDirectional(
-                top: -t.spaceXs,
-                end: -t.spaceXs,
+                top: -8,
+                end: -8,
                 child: Container(
-                  padding: EdgeInsets.symmetric(horizontal: t.spaceXs + t.spaceXs / 2),
-                  decoration: BoxDecoration(color: t.primary, borderRadius: BorderRadius.circular(t.radiusLg)),
-                  child: Text('$count', style: t.captionStyle.copyWith(color: t.onPrimary)),
+                  constraints: const BoxConstraints(minWidth: _badge),
+                  height: _badge,
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: t.frameDetected,
+                    borderRadius: BorderRadius.circular(_badge),
+                    border: Border.all(color: t.cameraSurface, width: 2),
+                  ),
+                  child: Text(
+                    '$count',
+                    style: t.captionStyle
+                        .sized(11, 11)
+                        .copyWith(
+                          color: t.onCameraSurface,
+                          fontWeight: FontWeight.w700,
+                          fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
+                        ),
+                  ),
                 ),
               ),
             ],

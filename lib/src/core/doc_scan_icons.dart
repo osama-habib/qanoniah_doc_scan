@@ -24,6 +24,13 @@ class DocScanIcons {
     required this.back,
     required this.done,
     required this.photoView,
+    required this.undo,
+    required this.dragHandle,
+    required this.pages,
+    required this.search,
+    required this.chevronUp,
+    required this.chevronDown,
+    required this.pdf,
   });
 
   final String close;
@@ -44,6 +51,21 @@ class DocScanIcons {
   final String back;
   final String done;
   final String photoView;
+
+  /// «إرجاع الصفحة لمكانها» on a moved page.
+  final String undo;
+
+  /// The grip on each review tile.
+  final String dragHandle;
+
+  /// «كل الصفحات»: the preview's page sidebar.
+  final String pages;
+  final String search;
+  final String chevronUp;
+  final String chevronDown;
+
+  /// Shown in full color next to the file name, not tinted.
+  final String pdf;
 }
 
 /// Renders one [DocScanIcons] path, tinted with [color].
@@ -74,8 +96,7 @@ class DocScanIcon extends StatelessWidget {
       colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
       semanticsLabel: semanticLabel,
     );
-    final bool mirror =
-        mirrorInRtl && Directionality.of(context) == TextDirection.rtl;
+    final bool mirror = mirrorInRtl && Directionality.of(context) == TextDirection.rtl;
     return mirror ? Transform.flip(flipX: true, child: icon) : icon;
   }
 }

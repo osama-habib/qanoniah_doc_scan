@@ -1,87 +1,169 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
+import '../../core/scan_metrics.dart';
+import '../../core/doc_scan_icons.dart';
 import '../../core/doc_scan_strings.dart';
 import '../../core/doc_scan_theme.dart';
 import '../../core/presentation/scan_widgets.dart';
 import '../../core/session/scan_session.dart';
 import '../manager/preview_cubit.dart';
 import 'attach_bar.dart';
-import 'edit_mode_view.dart';
-import 'photo_view.dart';
-import 'rename_sheet.dart';
 import 'text_page_view.dart';
 
-/// «معاينة ملف PDF»: page sidebar, text or photo view, edit mode, and attach
-/// (stories 6 to 9, 14, 15).
-class PreviewScreen extends StatelessWidget {
-  const PreviewScreen({super.key, required this.strings, required this.onCancel, required this.onAttach});
+/// «معاينة ملف PDF» (stories 5 to 8, 15, design `scanPdf`): every page on a gray
+/// canvas, as recognized text («إنشاء مستند قابل للتعديل») or as the photos
+/// («إرفاق كملف PDF» from review). The header renames the file in place and opens
+/// «كل الصفحات»; selecting text hides it or opens its paragraph.
+class PreviewScreen extends StatefulWidget {
+  const PreviewScreen({super.key, required this.strings, required this.onBack, required this.onAttach});
 
   final DocScanStrings strings;
-  final VoidCallback onCancel;
+
+  /// Back to review.
+  final VoidCallback onBack;
   final VoidCallback onAttach;
+
+  @override
+  State<PreviewScreen> createState() => _PreviewScreenState();
+}
+
+class _PreviewScreenState extends State<PreviewScreen> {
+  final ScrollController _scroll = ScrollController();
+  final Map<String, GlobalKey> _pageKeys = <String, GlobalKey>{};
+  bool _sidebar = false;
+  bool _renaming = false;
+
+  /// The paragraph open in place, as (page id, paragraph id).
+  (String, String)? _editing;
+
+  GlobalKey _keyOf(String pageId) => _pageKeys.putIfAbsent(pageId, GlobalKey.new);
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  void _back() {
+    if (_sidebar) return setState(() => _sidebar = false);
+    widget.onBack();
+  }
+
+  void _goTo(PreviewCubit cubit, int index) {
+    cubit.goToPage(index);
+    final BuildContext? c = _keyOf(cubit.state.pages[index].id).currentContext;
+    if (c != null) Scrollable.ensureVisible(c, duration: const Duration(milliseconds: 250), curve: Curves.easeOut);
+  }
+
+  /// Keeps «كل الصفحات» on the page at the top of the view.
+  bool _onScroll(PreviewCubit cubit, ScrollNotification n) {
+    if (n is! ScrollEndNotification) return false;
+    final List<CapturedPage> pages = cubit.state.pages;
+    for (int i = 0; i < pages.length; i++) {
+      final RenderObject? box = _keyOf(pages[i].id).currentContext?.findRenderObject();
+      if (box is! RenderBox || !box.hasSize) continue;
+      final RenderObject? viewport = context.findRenderObject();
+      final double bottom = box.localToGlobal(Offset(0, box.size.height), ancestor: viewport).dy;
+      if (bottom > 120) {
+        cubit.goToPage(i);
+        break;
+      }
+    }
+    return false;
+  }
 
   @override
   Widget build(BuildContext context) {
     final DocScanTheme t = DocScanTheme.of(context);
-    final DocScanStrings s = strings;
+    final DocScanStrings s = widget.strings;
     return ColoredBox(
       color: t.surface,
       child: SafeArea(
         child: BlocBuilder<PreviewCubit, PreviewState>(
           builder: (BuildContext context, PreviewState st) {
             final PreviewCubit cubit = context.read<PreviewCubit>();
-            final CapturedPage page = st.pages[st.currentPage];
+            final bool photos = st.view == PreviewView.photo;
+            final TextStyle bar = t.captionStyle.sized(12, 18).copyWith(color: t.onSurface);
             return Column(
               children: <Widget>[
-                ScanHeader(
-                  title: s.previewTitle,
-                  leading: ScanQuietButton(label: s.cancel, onPressed: onCancel),
-                  trailing: ScanQuietButton(
-                    label: st.editing ? s.done : s.edit,
-                    onPressed: () => cubit.setEditing(!st.editing),
-                  ),
+                _Header(
+                  strings: s,
+                  state: st,
+                  renaming: _renaming,
+                  sidebar: _sidebar,
+                  onBack: _back,
+                  onRename: (bool on) => setState(() => _renaming = on),
+                  onSidebar: () => setState(() => _sidebar = !_sidebar),
                 ),
-                _NameRow(name: '${st.fileStem}.pdf', strings: s),
-                if (!st.editing)
-                  Padding(
-                    padding: EdgeInsets.symmetric(horizontal: t.spaceLg),
-                    child: Text(s.previewTip, style: t.captionStyle.copyWith(color: t.onSurfaceMuted), textAlign: TextAlign.center),
-                  ),
-                if (!st.editing)
-                  Padding(
-                    padding: EdgeInsets.all(t.spaceSm),
-                    child: ScanSegmented<PreviewView>(
-                      options: <PreviewView, String>{PreviewView.text: s.textView, PreviewView.photo: s.photoView},
-                      selected: st.view,
-                      onChanged: cubit.showView,
-                      foreground: t.onSurfaceMuted,
-                      selectedForeground: t.onPrimary,
-                      selectedBackground: t.primary,
-                      background: t.surfaceSecondary,
+                if (!photos)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: t.surfaceSecondary,
+                      border: Border(bottom: BorderSide(color: t.surfaceTertiary)),
                     ),
-                  ),
-                if (st.edits.redactedWordCount > 0)
-                  Text(
-                    s.redactedWords(st.edits.redactedWordCount),
-                    style: t.captionStyle.copyWith(color: t.onSurfaceMuted),
+                    child: Text(s.previewTip, style: bar),
                   ),
                 Expanded(
-                  child: Row(
+                  child: Stack(
                     children: <Widget>[
-                      if (st.pages.length > 1) _Sidebar(pages: st.pages, current: st.currentPage, strings: s),
-                      Expanded(
-                        child: Stack(
-                          fit: StackFit.expand,
-                          children: <Widget>[
-                            if (st.editing)
-                              EditModeView(page: page, strings: s)
-                            else if (st.view == PreviewView.photo)
-                              PhotoView(page: page, strings: s)
-                            else
-                              TextPageView(page: page, strings: s),
-                            Align(alignment: Alignment.bottomCenter, child: SelectionActionBar(strings: s)),
-                          ],
+                      Positioned.fill(
+                        child: ColoredBox(
+                          color: t.canvas,
+                          child: NotificationListener<ScrollNotification>(
+                            onNotification: (ScrollNotification n) => _onScroll(cubit, n),
+                            child: ListView.separated(
+                              controller: _scroll,
+                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                              itemCount: st.pages.length,
+                              separatorBuilder: (BuildContext context, int _) => const SizedBox(height: 14),
+                              itemBuilder: (BuildContext context, int i) {
+                                final CapturedPage page = st.pages[i];
+                                return KeyedSubtree(
+                                  key: _keyOf(page.id),
+                                  child: Semantics(
+                                    label: s.pageLabel(i + 1),
+                                    child: photos
+                                        ? _PhotoPage(page: page, number: i + 1)
+                                        : TextPageView(
+                                            page: page,
+                                            strings: s,
+                                            editing: _editing?.$1 == page.id ? _editing?.$2 : null,
+                                            onEditDone: () => setState(() => _editing = null),
+                                          ),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ),
+                      ),
+                      if (_sidebar)
+                        PositionedDirectional(
+                          top: 0,
+                          bottom: 0,
+                          end: 0,
+                          child: _Sidebar(
+                            pages: st.pages,
+                            current: st.currentPage,
+                            photos: photos,
+                            strings: s,
+                            onTap: (int i) => _goTo(cubit, i),
+                          ),
+                        ),
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        bottom: 16,
+                        child: Center(
+                          child: SelectionActionBar(
+                            strings: s,
+                            onEdit: (WordSelection sel) => setState(() => _editing = (sel.pageId, sel.paragraphId)),
+                          ),
                         ),
                       ),
                     ],
@@ -89,13 +171,12 @@ class PreviewScreen extends StatelessWidget {
                 ),
                 AttachBar(
                   strings: s,
-                  pageCount: st.pages.length,
-                  sizeBytes: st.sizeBytes,
+                  hiddenWords: st.edits.redactedWordCount,
                   busy: st.attaching,
                   failure: st.failure,
                   onAttach: () {
                     FocusScope.of(context).unfocus();
-                    onAttach();
+                    widget.onAttach();
                   },
                 ),
               ],
@@ -107,82 +188,331 @@ class PreviewScreen extends StatelessWidget {
   }
 }
 
-class _NameRow extends StatelessWidget {
-  const _NameRow({required this.name, required this.strings});
+/// Back, the PDF icon with the file name (tap to rename in place), the page
+/// count and «كل الصفحات».
+class _Header extends StatelessWidget {
+  const _Header({
+    required this.strings,
+    required this.state,
+    required this.renaming,
+    required this.sidebar,
+    required this.onBack,
+    required this.onRename,
+    required this.onSidebar,
+  });
 
-  final String name;
   final DocScanStrings strings;
+  final PreviewState state;
+  final bool renaming;
+  final bool sidebar;
+  final VoidCallback onBack;
+  final ValueChanged<bool> onRename;
+  final VoidCallback onSidebar;
 
   @override
   Widget build(BuildContext context) {
     final DocScanTheme t = DocScanTheme.of(context);
-    final PreviewCubit cubit = context.read<PreviewCubit>();
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: <Widget>[
-        Flexible(
-          child: Text(
-            name,
-            textDirection: TextDirection.rtl,
-            style: t.bodyStrongStyle.copyWith(color: t.onSurface),
-            overflow: TextOverflow.ellipsis,
+    final TextStyle name = t.bodyStyle.sized(14, 20).copyWith(color: t.onSurface, fontWeight: FontWeight.w700);
+    return Container(
+      padding: ScanMetrics.header,
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: t.surfaceTertiary)),
+      ),
+      child: Row(
+        children: <Widget>[
+          ScanIconButton(
+            icon: t.icons.back,
+            label: strings.back,
+            mirrorInRtl: true,
+            color: t.onSurface,
+            background: t.surfaceTertiary,
+            onPressed: onBack,
           ),
-        ),
-        ScanIconButton(
-          icon: t.icons.edit,
-          label: strings.rename,
-          color: t.onSurfaceMuted,
-          size: t.iconSize * 0.8,
-          onPressed: () => showRenameSheet(
-            context,
-            strings: strings,
-            current: cubit.state.fileStem,
-            onSave: cubit.rename,
+          const SizedBox(width: 12),
+          Expanded(
+            child: Semantics(
+              header: true,
+              label: strings.previewTitle,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: <Widget>[
+                  SvgPicture.asset(t.icons.pdf, width: 18, height: 22),
+                  const SizedBox(width: 8),
+                  if (renaming)
+                    Flexible(
+                      child: _RenameField(
+                        initial: state.fileStem,
+                        style: name.sized(16, 20),
+                        strings: strings,
+                        onDone: () => onRename(false),
+                      ),
+                    )
+                  else
+                    Flexible(
+                      child: Semantics(
+                        button: true,
+                        label: strings.rename,
+                        child: GestureDetector(
+                          onTap: () => onRename(true),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: <Widget>[
+                              Flexible(
+                                child: Text(
+                                  '\u2068${state.fileStem}\u2069.pdf',
+                                  style: name,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              DocScanIcon(t.icons.edit, size: 14, color: t.onSurfaceMuted),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
           ),
-        ),
-      ],
+          const SizedBox(width: 8),
+          Text(
+            strings.pageCount(state.pages.length),
+            style: t.captionStyle
+                .sized(12, 16)
+                .copyWith(color: t.onSurfaceMuted, fontFeatures: const <FontFeature>[FontFeature.tabularFigures()]),
+          ),
+          const SizedBox(width: 8),
+          ScanIconButton(
+            icon: t.icons.pages,
+            label: strings.allPages,
+            color: t.onSurface,
+            background: sidebar ? t.primary.withValues(alpha: 0.07) : t.surfaceTertiary,
+            onPressed: onSidebar,
+          ),
+        ],
+      ),
     );
   }
 }
 
-class _Sidebar extends StatelessWidget {
-  const _Sidebar({required this.pages, required this.current, required this.strings});
+/// The file name in place, with a fixed «.pdf» (design `scanNameEditing`).
+class _RenameField extends StatefulWidget {
+  const _RenameField({required this.initial, required this.style, required this.strings, required this.onDone});
 
-  final List<CapturedPage> pages;
-  final int current;
+  final String initial;
+  final TextStyle style;
   final DocScanStrings strings;
+  final VoidCallback onDone;
+
+  @override
+  State<_RenameField> createState() => _RenameFieldState();
+}
+
+class _RenameFieldState extends State<_RenameField> {
+  late final TextEditingController _c = TextEditingController(text: widget.initial)
+    ..selection = TextSelection(baseOffset: 0, extentOffset: widget.initial.length);
+  final FocusNode _focus = FocusNode();
+  bool _done = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _focus.addListener(() {
+      if (!_focus.hasFocus) _save();
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _focus.requestFocus();
+    });
+  }
+
+  void _save() {
+    if (_done) return;
+    _done = true;
+    // An empty or invalid name keeps the old one.
+    context.read<PreviewCubit>().rename(_c.text);
+    widget.onDone();
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    _focus.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final DocScanTheme t = DocScanTheme.of(context);
-    final PreviewCubit cubit = context.read<PreviewCubit>();
     return Container(
-      width: t.thumbnailSize + t.spaceMd,
-      decoration: BoxDecoration(border: BorderDirectional(end: BorderSide(color: t.border))),
-      child: ListView.separated(
-        padding: EdgeInsets.all(t.spaceXs),
-        itemCount: pages.length,
-        separatorBuilder: (BuildContext context, int _) => SizedBox(height: t.spaceXs),
-        itemBuilder: (BuildContext context, int i) => Semantics(
-          button: true,
-          selected: i == current,
-          label: strings.pageLabel(i + 1),
-          excludeSemantics: true,
-          child: GestureDetector(
-            onTap: () => cubit.goToPage(i),
-            child: Container(
-              height: t.thumbnailSize * 1.3,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(t.radiusSm),
-                border: Border.all(color: i == current ? t.primary : t.border, width: i == current ? t.frameStrokeWidth : 1),
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(t.radiusSm),
-                child: Image.file(pages[i].preparedFile, fit: BoxFit.cover, cacheWidth: 160),
-              ),
+      constraints: const BoxConstraints(maxWidth: 200),
+      height: 32,
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      decoration: BoxDecoration(
+        color: t.surface,
+        border: Border.all(color: t.primary),
+        borderRadius: ScanMetrics.radius(8),
+      ),
+      child: Row(
+        children: <Widget>[
+          Expanded(
+            child: TextField(
+              controller: _c,
+              focusNode: _focus,
+              style: widget.style,
+              maxLines: 1,
+              textInputAction: TextInputAction.done,
+              inputFormatters: <TextInputFormatter>[FilteringTextInputFormatter.deny(RegExp(r'[/\\:]'))],
+              onSubmitted: (_) => _focus.unfocus(),
+              onTapOutside: (_) => _focus.unfocus(),
+              decoration: InputDecoration.collapsed(hintText: widget.strings.rename),
             ),
           ),
+          Text(
+            '.pdf',
+            textDirection: TextDirection.ltr,
+            style: t.captionStyle.sized(13, 20).copyWith(color: t.onSurfaceMuted),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A photo page on A4 paper with its number at the bottom (design `scanImgMode`).
+class _PhotoPage extends StatelessWidget {
+  const _PhotoPage({required this.page, required this.number});
+
+  final CapturedPage page;
+  final int number;
+
+  @override
+  Widget build(BuildContext context) {
+    final DocScanTheme t = DocScanTheme.of(context);
+    return AspectRatio(
+      aspectRatio: 1 / 1.414,
+      child: LayoutBuilder(
+        builder: (BuildContext context, BoxConstraints c) => Container(
+          decoration: BoxDecoration(color: t.surface, boxShadow: pageShadow(t)),
+          padding: EdgeInsets.fromLTRB(c.maxWidth * 0.06, c.maxWidth * 0.06, c.maxWidth * 0.06, c.maxWidth * 0.09),
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: <Widget>[
+              Positioned.fill(child: Image.file(page.preparedFile, fit: BoxFit.contain, cacheWidth: 1200)),
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: -c.maxWidth * 0.06,
+                child: Text(
+                  '$number',
+                  textAlign: TextAlign.center,
+                  style: t.captionStyle.sized(9, 12).copyWith(color: t.onSurfaceMuted),
+                ),
+              ),
+            ],
+          ),
         ),
+      ),
+    );
+  }
+}
+
+/// «كل الصفحات»: a 96 wide frosted column of page thumbnails (design `scanGrid`).
+class _Sidebar extends StatelessWidget {
+  const _Sidebar({
+    required this.pages,
+    required this.current,
+    required this.photos,
+    required this.strings,
+    required this.onTap,
+  });
+
+  final List<CapturedPage> pages;
+  final int current;
+  final bool photos;
+  final DocScanStrings strings;
+  final ValueChanged<int> onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final DocScanTheme t = DocScanTheme.of(context);
+    return Container(
+      width: 96,
+      decoration: BoxDecoration(
+        color: t.surfaceSecondary.withValues(alpha: 0.94),
+        border: BorderDirectional(start: BorderSide(color: t.border)),
+        boxShadow: <BoxShadow>[
+          BoxShadow(color: t.inverseSurface.withValues(alpha: 0.06), blurRadius: 18, offset: const Offset(-6, 0)),
+        ],
+      ),
+      child: ListView.separated(
+        padding: ScanMetrics.sidebar,
+        itemCount: pages.length,
+        separatorBuilder: (BuildContext context, int _) => const SizedBox(height: 14),
+        itemBuilder: (BuildContext context, int i) {
+          final bool on = i == current;
+          return Semantics(
+            button: true,
+            selected: on,
+            label: strings.pageLabel(i + 1),
+            excludeSemantics: true,
+            child: GestureDetector(
+              onTap: () => onTap(i),
+              child: Column(
+                children: <Widget>[
+                  Container(
+                    padding: ScanMetrics.ring,
+                    decoration: BoxDecoration(
+                      borderRadius: ScanMetrics.radius(6),
+                      border: Border.all(color: on ? t.primary : t.border, width: on ? 2 : 1),
+                    ),
+                    child: AspectRatio(
+                      aspectRatio: 1 / 1.414,
+                      child: Container(
+                        clipBehavior: Clip.antiAlias,
+                        decoration: BoxDecoration(
+                          color: t.surface,
+                          borderRadius: ScanMetrics.radius(4),
+                          boxShadow: pageShadow(t),
+                        ),
+                        child: photos
+                            ? Padding(
+                                padding: ScanMetrics.thumbPaper,
+                                child: Image.file(pages[i].preparedFile, fit: BoxFit.contain, cacheWidth: 200),
+                              )
+                            : IgnorePointer(
+                                child: FittedBox(
+                                  fit: BoxFit.fitWidth,
+                                  alignment: Alignment.topCenter,
+                                  child: SizedBox(
+                                    width: 360,
+                                    child: TextPageView(page: pages[i], strings: strings),
+                                  ),
+                                ),
+                              ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Container(
+                    constraints: const BoxConstraints(minWidth: 22),
+                    height: 18,
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(color: on ? t.primary : null, borderRadius: ScanMetrics.radius(18)),
+                    child: Text(
+                      '${i + 1}',
+                      style: t.captionStyle
+                          .sized(11, 11)
+                          .copyWith(color: on ? t.onPrimary : t.primary, fontWeight: FontWeight.w500),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
       ),
     );
   }

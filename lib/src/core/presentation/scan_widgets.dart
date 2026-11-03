@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../scan_metrics.dart';
 import '../doc_scan_icons.dart';
 import '../doc_scan_theme.dart';
 
@@ -29,15 +30,19 @@ class ScanPrimaryButton extends StatelessWidget {
         child: InkWell(
           borderRadius: BorderRadius.circular(t.radiusMd),
           onTap: enabled ? onPressed : null,
-          child: Padding(
-            padding: EdgeInsets.symmetric(vertical: t.spaceMd, horizontal: t.spaceLg),
+          child: SizedBox(
+            height: 48,
             child: Center(
               child: busy
                   ? SizedBox.square(
                       dimension: t.iconSize,
                       child: CircularProgressIndicator(strokeWidth: t.frameStrokeWidth, color: t.onPrimary),
                     )
-                  : Text(label, style: t.buttonStyle.copyWith(color: t.onPrimary), textAlign: TextAlign.center),
+                  : Text(
+                      label,
+                      style: t.buttonStyle.sized(15, 22).copyWith(color: t.onPrimary, fontWeight: FontWeight.w700),
+                      textAlign: TextAlign.center,
+                    ),
             ),
           ),
         ),
@@ -71,12 +76,12 @@ class ScanSecondaryButton extends StatelessWidget {
         child: InkWell(
           borderRadius: BorderRadius.circular(t.radiusMd),
           onTap: onPressed,
-          child: Padding(
-            padding: EdgeInsets.symmetric(vertical: t.spaceMd, horizontal: t.spaceLg),
+          child: SizedBox(
+            height: 44,
             child: Center(
               child: Text(
                 label,
-                style: t.buttonStyle.copyWith(color: enabled ? t.onSurface : t.onSurfaceMuted),
+                style: t.bodyStyle.sized(14, 20).copyWith(color: enabled ? t.onSurface : t.onSurfaceMuted),
                 textAlign: TextAlign.center,
               ),
             ),
@@ -89,12 +94,22 @@ class ScanSecondaryButton extends StatelessWidget {
 
 /// A quiet text action with an optional leading icon.
 class ScanQuietButton extends StatelessWidget {
-  const ScanQuietButton({super.key, required this.label, required this.onPressed, this.icon, this.color});
+  const ScanQuietButton({
+    super.key,
+    required this.label,
+    required this.onPressed,
+    this.icon,
+    this.color,
+    this.textStyle,
+  });
 
   final String label;
   final VoidCallback? onPressed;
   final String? icon;
   final Color? color;
+
+  /// Overrides the theme's button style; the color still comes from [color].
+  final TextStyle? textStyle;
 
   @override
   Widget build(BuildContext context) {
@@ -112,11 +127,15 @@ class ScanQuietButton extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
-              if (icon != null) ...<Widget>[
-                DocScanIcon(icon!, size: t.iconSize, color: c),
-                SizedBox(width: t.spaceXs),
-              ],
-              Flexible(child: Text(label, style: t.buttonStyle.copyWith(color: c), maxLines: 1, softWrap: false)),
+              if (icon != null) ...<Widget>[DocScanIcon(icon!, size: t.iconSize, color: c), SizedBox(width: t.spaceXs)],
+              Flexible(
+                child: Text(
+                  label,
+                  style: (textStyle ?? t.buttonStyle).copyWith(color: c),
+                  maxLines: 1,
+                  softWrap: false,
+                ),
+              ),
             ],
           ),
         ),
@@ -149,7 +168,8 @@ class ScanIconButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final DocScanTheme t = DocScanTheme.of(context);
-    final double s = size ?? t.iconSize;
+    // Design: a 36 circle around an 18 glyph.
+    final double s = size ?? 18;
     return Semantics(
       button: true,
       label: label,
@@ -160,9 +180,11 @@ class ScanIconButton extends StatelessWidget {
         child: InkWell(
           customBorder: const CircleBorder(),
           onTap: onPressed,
-          child: Padding(
-            padding: EdgeInsets.all(t.spaceSm),
-            child: DocScanIcon(icon, size: s, color: color, mirrorInRtl: mirrorInRtl),
+          child: SizedBox.square(
+            dimension: 36,
+            child: Center(
+              child: DocScanIcon(icon, size: s, color: color, mirrorInRtl: mirrorInRtl),
+            ),
           ),
         ),
       ),
@@ -178,13 +200,13 @@ class ScanSheetHandle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final DocScanTheme t = DocScanTheme.of(context);
+    // Design grabber: 36 by 5, 7 from the top.
     return Padding(
-      padding: EdgeInsets.symmetric(vertical: t.spaceSm),
+      padding: const EdgeInsets.only(top: 7, bottom: 2),
       child: Container(
-        width: t.thumbnailSize / 2,
-        height: t.spaceXs,
-        decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(t.spaceXs)),
+        width: 36,
+        height: 5,
+        decoration: BoxDecoration(color: color, borderRadius: ScanMetrics.radius(5)),
       ),
     );
   }
@@ -194,12 +216,26 @@ class ScanSheetHandle extends StatelessWidget {
 /// keep their natural width on one line (never wrapped), and the title stays
 /// centered on the screen whatever their widths.
 class ScanHeader extends StatelessWidget {
-  const ScanHeader({super.key, required this.title, this.leading, this.trailing, this.color});
+  const ScanHeader({
+    super.key,
+    required this.title,
+    this.leading,
+    this.trailing,
+    this.color,
+    this.divider = false,
+    this.titleWidget,
+  });
 
   final String title;
   final Widget? leading;
   final Widget? trailing;
   final Color? color;
+
+  /// The 1px line under light headers (design #f3f4f6).
+  final bool divider;
+
+  /// Replaces the plain [title] text, e.g. the preview's file name.
+  final Widget? titleWidget;
 
   @override
   Widget build(BuildContext context) {
@@ -210,8 +246,14 @@ class ScanHeader extends StatelessWidget {
         child: w == null ? null : FittedBox(fit: BoxFit.scaleDown, alignment: a, child: w),
       ),
     );
-    return Padding(
-      padding: EdgeInsets.symmetric(horizontal: t.spaceSm, vertical: t.spaceXs),
+    // Design header: 16 at the sides, 12 above and below, a 16 / 24 bold title.
+    return Container(
+      padding: ScanMetrics.header,
+      decoration: divider
+          ? BoxDecoration(
+              border: Border(bottom: BorderSide(color: t.surfaceTertiary)),
+            )
+          : null,
       child: Row(
         children: <Widget>[
           side(leading, AlignmentDirectional.centerStart),
@@ -219,13 +261,16 @@ class ScanHeader extends StatelessWidget {
             flex: 2,
             child: Semantics(
               header: true,
-              child: Text(
-                title,
-                style: t.titleStyle.copyWith(color: color ?? t.onSurface),
-                textAlign: TextAlign.center,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
+              label: titleWidget == null ? null : title,
+              child:
+                  titleWidget ??
+                  Text(
+                    title,
+                    style: t.bodyStyle.sized(16, 24).copyWith(color: color ?? t.onSurface, fontWeight: FontWeight.w700),
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
             ),
           ),
           side(trailing, AlignmentDirectional.centerEnd),

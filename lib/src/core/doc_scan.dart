@@ -49,7 +49,8 @@ abstract final class DocScan {
   static Future<DocScanResult?> start(BuildContext context, DocScanConfig config) async {
     if (_running) throw StateError('A document scan is already running.');
     DocScanTheme.of(context);
-    final DocScanStrings strings = config.strings ??
+    final DocScanStrings strings =
+        config.strings ??
         (Localizations.localeOf(context).languageCode == 'ar' ? DocScanStrings.ar() : DocScanStrings.en());
     _running = true;
     config.onEvent?.call(DocScanEvent.started());
@@ -57,11 +58,8 @@ abstract final class DocScan {
       return await Navigator.of(context, rootNavigator: true).push<DocScanResult>(
         MaterialPageRoute<DocScanResult>(
           fullscreenDialog: true,
-          builder: (BuildContext _) => DocScanFlow(
-            config: config,
-            strings: strings,
-            deps: (debugDeps ?? ScanFlowDeps.platform)(),
-          ),
+          builder: (BuildContext _) =>
+              DocScanFlow(config: config, strings: strings, deps: (debugDeps ?? ScanFlowDeps.platform)()),
         ),
       );
     } finally {
@@ -176,8 +174,7 @@ class _DocScanFlowState extends State<DocScanFlow> {
     redactedLabel: widget.strings.redactedText,
   );
 
-  String get _defaultStem =>
-      '${widget.strings.defaultFileStem}-${widget.config.fileNumber.toString().padLeft(2, '0')}';
+  String get _defaultStem => '${widget.strings.defaultFileStem}-${widget.config.fileNumber.toString().padLeft(2, '0')}';
 
   void _openCamera({String? replacing}) => setState(() {
     _fromReview = _step == _Step.review || _step == _Step.filters;
@@ -212,6 +209,14 @@ class _DocScanFlowState extends State<DocScanFlow> {
   void _cameraCancelled() {
     if (_sessions.session.pages.isNotEmpty) return _openReview();
     _cancel(ScanStep.capture);
+  }
+
+  /// The preview's back (design `scanPdfBack`): review again; a later build
+  /// makes a new preview.
+  void _previewBack() {
+    unawaited(_preview?.close());
+    _preview = null;
+    _openReview();
   }
 
   Future<void> _cancel(ScanStep step) async {
@@ -304,7 +309,11 @@ class _DocScanFlowState extends State<DocScanFlow> {
         return Center(
           child: Padding(
             padding: EdgeInsets.all(t.spaceXl),
-            child: Text(s.storageFull, style: t.bodyStyle.copyWith(color: t.danger), textAlign: TextAlign.center),
+            child: Text(
+              s.storageFull,
+              style: t.bodyStyle.copyWith(color: t.danger),
+              textAlign: TextAlign.center,
+            ),
           ),
         );
       case _Step.camera:
@@ -345,12 +354,7 @@ class _DocScanFlowState extends State<DocScanFlow> {
             onEvent: _emit,
             announce: false,
           ),
-          child: FiltersScreen(
-            strings: s,
-            initialIndex: _filterIndex,
-            onBack: _openCamera,
-            onNext: _openReview,
-          ),
+          child: FiltersScreen(strings: s, initialIndex: _filterIndex, onBack: _openCamera, onNext: _openReview),
         );
       case _Step.review:
         return BlocProvider<ReviewCubit>(
@@ -406,7 +410,7 @@ class _DocScanFlowState extends State<DocScanFlow> {
         );
         return BlocProvider<PreviewCubit>.value(
           value: cubit,
-          child: PreviewScreen(strings: s, onCancel: () => _cancel(ScanStep.preview), onAttach: _attach),
+          child: PreviewScreen(strings: s, onBack: _previewBack, onAttach: _attach),
         );
     }
   }

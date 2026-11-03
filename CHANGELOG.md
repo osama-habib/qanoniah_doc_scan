@@ -1,3 +1,24 @@
+## 0.5.0
+
+Matches the Claude Design «Full App - Document Scan» screen by screen.
+
+* Camera: manual capture by default with no mode toggle and no hint line. Each shot opens a
+  corner step on the photo (four draggable corners, outside dimmed) with «إعادة الالتقاط» and
+  «حفظ الصفحة». Full-width preview on black, 72/58 shutter, a stacked-pages button with the
+  count badge, and «حفظ (N)». Auto capture stays in the cubit for a host that turns it on.
+* Review: «صفحة N» under each tile, a ✕ on the tile opens the delete card, a grip on each tile,
+  and the moved page shows a dashed ring with an undo button. No tile menu.
+* Delete: a bottom card with the page thumbnail, «إلغاء» and a red «حذف».
+* Build: a page sketch with a moving scan line over the three steps.
+* Preview: every page on a gray canvas; header with the PDF icon, the file name renamed in place
+  («.pdf» fixed), the page count and «كل الصفحات» (a thumbnail column). Hidden words show
+  blurred. The selection pill hides or shows text and «تعديل» opens the paragraph in place.
+  Photo pages for «إرفاق كملف PDF». No text/photo toggle, scan color or edit mode in the UI.
+* Viewer: the preview's header with ✕, gray canvas, no attach.
+* Breaking for hosts: `DocScanTheme` adds `canvas`, `surfaceTertiary`, `inverseSurface`;
+  `DocScanIcons` adds `undo`, `dragHandle`, `pages`, `search`, `chevronUp`, `chevronDown`, `pdf`.
+* Design sizes that have no kit token live in `ScanMetrics` (pending design confirmation).
+
 ## 0.4.1
 
 * Fixed on iOS: the live page frame was drawn on swapped axes. iOS delivers upright frames

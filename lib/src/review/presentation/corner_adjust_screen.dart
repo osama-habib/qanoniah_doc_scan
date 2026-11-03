@@ -8,6 +8,8 @@ import '../../core/presentation/scan_widgets.dart';
 import '../../core/session/scan_session.dart';
 import '../../capture/presentation/edge_frame_overlay.dart';
 
+// TODO(unused): the design sets corners on the camera's corner step
+// (CornerEditor); review no longer opens this screen.
 /// «زاوية الصفحة»: four draggable corners over the raw capture (story 12).
 /// Pops the new [Quad], or null for «إعادة الالتقاط» / back.
 class CornerAdjustScreen extends StatefulWidget {

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../core/scan_metrics.dart';
 import '../../core/doc_scan_icons.dart';
 import '../../core/doc_scan_strings.dart';
 import '../../core/doc_scan_theme.dart';
@@ -8,8 +9,9 @@ import '../../core/failures.dart';
 import '../../core/presentation/scan_widgets.dart';
 import '../manager/build_cubit.dart';
 
-/// Progress screen: an animated scan line and three steps completing in order
-/// (story 4, FR-012).
+/// Progress screen (story 4, FR-012, design `scanBuilding`): a page sketch with a
+/// moving scan line over three steps that complete in order. Back cancels; a
+/// failure adds «إعادة المحاولة» and «إلغاء».
 class BuildScreen extends StatelessWidget {
   const BuildScreen({super.key, required this.strings, required this.onCancel});
 
@@ -26,45 +28,52 @@ class BuildScreen extends StatelessWidget {
         child: BlocBuilder<BuildCubit, BuildState>(
           builder: (BuildContext context, BuildState st) {
             final BuildFailure? f = st.failure;
-            return Column(
-              children: <Widget>[
-                ScanHeader(title: s.scanTitle, leading: ScanQuietButton(label: s.cancel, onPressed: onCancel)),
-                const Spacer(),
-                SizedBox(
-                  width: t.thumbnailSize * 3,
-                  height: t.thumbnailSize * 4,
-                  child: _ScanLine(running: f == null && st.step != BuildStep.done),
-                ),
-                SizedBox(height: t.spaceXl),
-                for (final (BuildStep step, String label) in <(BuildStep, String)>[
-                  (BuildStep.analyze, s.stepAnalyze),
-                  (BuildStep.extract, s.stepExtract),
-                  (BuildStep.pdf, s.stepPdf),
-                ])
-                  _StepRow(label: label, step: step, current: st),
-                const Spacer(),
-                if (f != null)
-                  Padding(
-                    padding: EdgeInsets.all(t.spaceLg),
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: <Widget>[
+                  _PageSketch(running: f == null && st.step != BuildStep.done),
+                  const SizedBox(height: 28),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 260),
                     child: Column(
                       children: <Widget>[
-                        Text(
-                          switch (f) {
-                            BuildTooLarge(:final int sizeBytes, :final int limitBytes) =>
-                              s.sizeLimit(sizeBytes / (1024 * 1024), limitBytes / (1024 * 1024)),
-                            BuildStorageFull() => s.storageFull,
-                            BuildUnknown() => s.buildFailed,
-                          },
-                          style: t.bodyStyle.copyWith(color: t.danger),
-                          textAlign: TextAlign.center,
-                        ),
-                        SizedBox(height: t.spaceMd),
-                        if (f is! BuildTooLarge)
-                          ScanPrimaryButton(label: s.retry, onPressed: context.read<BuildCubit>().retry),
+                        for (final (BuildStep step, String label) in <(BuildStep, String)>[
+                          (BuildStep.analyze, s.stepAnalyze),
+                          (BuildStep.extract, s.stepExtract),
+                          (BuildStep.pdf, s.stepPdf),
+                        ])
+                          Padding(
+                            padding: EdgeInsets.only(top: step == BuildStep.analyze ? 0 : 12),
+                            child: _StepRow(label: label, step: step, current: st),
+                          ),
                       ],
                     ),
                   ),
-              ],
+                  if (f != null) ...<Widget>[
+                    const SizedBox(height: 28),
+                    Text(
+                      switch (f) {
+                        BuildTooLarge(:final int sizeBytes, :final int limitBytes) => s.sizeLimit(
+                          sizeBytes / (1024 * 1024),
+                          limitBytes / (1024 * 1024),
+                        ),
+                        BuildStorageFull() => s.storageFull,
+                        BuildUnknown() => s.buildFailed,
+                      },
+                      style: t.bodyStyle.sized(14, 20).copyWith(color: t.danger),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 16),
+                    if (f is! BuildTooLarge) ...<Widget>[
+                      ScanPrimaryButton(label: s.retry, onPressed: context.read<BuildCubit>().retry),
+                      const SizedBox(height: 10),
+                    ],
+                    ScanSecondaryButton(label: s.cancel, onPressed: onCancel),
+                  ],
+                ],
+              ),
             );
           },
         ),
@@ -89,47 +98,46 @@ class _StepRow extends StatelessWidget {
       label: label,
       value: done ? '100%' : (active ? '${(current.progress * 100).round()}%' : '0%'),
       excludeSemantics: true,
-      child: Padding(
-        padding: EdgeInsets.symmetric(horizontal: t.spaceXl, vertical: t.spaceSm),
-        child: Row(
-          children: <Widget>[
-            SizedBox.square(
-              dimension: t.iconSize,
-              child: done
-                  ? DocScanIcon(t.icons.done, size: t.iconSize, color: t.primary)
-                  : (active
-                        ? CircularProgressIndicator(
-                            strokeWidth: t.frameStrokeWidth,
-                            color: t.primary,
-                            value: current.progress > 0 && current.progress < 1 ? current.progress : null,
-                          )
-                        : DecoratedBox(
-                            decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: t.border)),
-                          )),
+      child: Row(
+        children: <Widget>[
+          // Design dots: filled navy with a check when done, a navy ring when
+          // current, a light ring when waiting.
+          Container(
+            width: 20,
+            height: 20,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: done ? t.primary : t.surface,
+              border: done ? null : Border.all(color: active ? t.primary : t.border, width: active ? 2 : 1.5),
             ),
-            SizedBox(width: t.spaceMd),
-            Text(
+            child: done ? DocScanIcon(t.icons.done, size: 11, color: t.onPrimary) : null,
+          ),
+          const SizedBox(width: 10),
+          Flexible(
+            child: Text(
               label,
-              style: (active ? t.bodyStrongStyle : t.bodyStyle).copyWith(color: done || active ? t.onSurface : t.onSurfaceMuted),
+              style: t.bodyStyle.sized(14, 20).copyWith(color: done || active ? t.onSurface : t.onSurfaceMuted),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 }
 
-class _ScanLine extends StatefulWidget {
-  const _ScanLine({required this.running});
+/// A 96 by 124 page with five text lines and a scan line moving up and down.
+class _PageSketch extends StatefulWidget {
+  const _PageSketch({required this.running});
 
   final bool running;
 
   @override
-  State<_ScanLine> createState() => _ScanLineState();
+  State<_PageSketch> createState() => _PageSketchState();
 }
 
-class _ScanLineState extends State<_ScanLine> with SingleTickerProviderStateMixin {
-  late final AnimationController _c = AnimationController(vsync: this, duration: const Duration(milliseconds: 1600));
+class _PageSketchState extends State<_PageSketch> with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(vsync: this, duration: const Duration(milliseconds: 1100));
 
   @override
   void initState() {
@@ -138,7 +146,7 @@ class _ScanLineState extends State<_ScanLine> with SingleTickerProviderStateMixi
   }
 
   @override
-  void didUpdateWidget(_ScanLine old) {
+  void didUpdateWidget(_PageSketch old) {
     super.didUpdateWidget(old);
     if (widget.running && !_c.isAnimating) _c.repeat(reverse: true);
     if (!widget.running) _c.stop();
@@ -153,23 +161,64 @@ class _ScanLineState extends State<_ScanLine> with SingleTickerProviderStateMixi
   @override
   Widget build(BuildContext context) {
     final DocScanTheme t = DocScanTheme.of(context);
-    return Container(
-      decoration: BoxDecoration(
-        color: t.surfaceSecondary,
-        borderRadius: BorderRadius.circular(t.radiusMd),
-        border: Border.all(color: t.border),
+    Widget line(double widthFactor, Color color) => Padding(
+      padding: const EdgeInsets.only(bottom: 7),
+      child: FractionallySizedBox(
+        alignment: AlignmentDirectional.centerStart,
+        widthFactor: widthFactor,
+        child: Container(
+          height: 5,
+          decoration: BoxDecoration(color: color, borderRadius: ScanMetrics.radius(2)),
+        ),
       ),
-      child: Stack(
-        children: <Widget>[
-          Center(child: DocScanIcon(t.icons.document, size: t.thumbnailSize, color: t.onSurfaceMuted)),
-          AnimatedBuilder(
-            animation: _c,
-            builder: (BuildContext context, Widget? _) => Align(
-              alignment: Alignment(0, _c.value * 2 - 1),
-              child: Container(height: t.frameStrokeWidth, color: t.primary),
+    );
+    return ExcludeSemantics(
+      child: Container(
+        width: 96,
+        height: 124,
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          color: t.surface,
+          borderRadius: ScanMetrics.radius(8),
+          border: Border.all(color: t.border),
+          boxShadow: <BoxShadow>[
+            BoxShadow(color: t.primary.withValues(alpha: 0.10), blurRadius: 24, offset: const Offset(0, 8)),
+          ],
+        ),
+        child: Stack(
+          children: <Widget>[
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 18),
+              child: Column(
+                children: <Widget>[
+                  line(0.6, t.border),
+                  line(1, t.surfaceTertiary),
+                  line(0.85, t.surfaceTertiary),
+                  line(1, t.surfaceTertiary),
+                  line(0.7, t.surfaceTertiary),
+                ],
+              ),
             ),
-          ),
-        ],
+            AnimatedBuilder(
+              animation: _c,
+              builder: (BuildContext context, Widget? _) => Align(
+                alignment: Alignment(0, Curves.easeInOut.transform(_c.value) * 2 - 1),
+                child: Container(
+                  height: 2,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: <Color>[
+                        t.frameDetected.withValues(alpha: 0),
+                        t.frameDetected,
+                        t.frameDetected.withValues(alpha: 0),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

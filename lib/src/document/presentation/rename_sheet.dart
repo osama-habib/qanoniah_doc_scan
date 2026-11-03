@@ -4,6 +4,7 @@ import '../../core/doc_scan_strings.dart';
 import '../../core/doc_scan_theme.dart';
 import '../../core/presentation/scan_widgets.dart';
 
+// TODO(unused): the design renames in place in the preview header.
 /// «إعادة تسمية المستند» (story 15). [onSave] returns false for an invalid name,
 /// which keeps the sheet open.
 Future<void> showRenameSheet(

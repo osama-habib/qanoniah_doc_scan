@@ -55,6 +55,13 @@ void main() {
     }
   }
 
+  /// A manual shot through the corner step, keeping the corners it found.
+  Future<void> shoot(CaptureCubit c) async {
+    await c.capture();
+    final Quad? q = c.state.adjustQuad;
+    if (q != null) await c.keepAdjusted(q);
+  }
+
   setUp(() async {
     tmp = await Directory.systemTemp.createTemp('cap');
     sessions = ScanSessionRepo(tempRoot: () async => tmp);
@@ -75,6 +82,7 @@ void main() {
   test('steady, sharp, bright frames capture exactly once', () async {
     final CaptureCubit c = cubit();
     await c.start();
+    c.setMode(CaptureMode.auto);
     await feed(8);
     if (c.state.pageCount == 0) {
       await c.stream.firstWhere((CaptureState s) => s.pageCount > 0).timeout(const Duration(seconds: 5));
@@ -90,6 +98,7 @@ void main() {
     edges.next = const FrameAnalysis(quad: page, sharpness: 200, luminance: 10);
     final CaptureCubit c = cubit();
     await c.start();
+    c.setMode(CaptureMode.auto);
     await feed(8);
     expect(c.state.hint, CaptureHint.lowLight);
     edges.next = const FrameAnalysis(quad: page, sharpness: 5, luminance: 140);
@@ -104,7 +113,7 @@ void main() {
     final CaptureCubit c = cubit();
     await c.start();
     c.setMode(CaptureMode.manual);
-    await c.capture();
+    await shoot(c);
     expect(sessions.session.pages.single.corners, Quad.fullFrame);
     await c.close();
   });
@@ -113,9 +122,9 @@ void main() {
     final CaptureCubit c = cubit();
     await c.start();
     c.setMode(CaptureMode.manual);
-    await c.capture();
-    await c.capture();
-    await c.capture();
+    await shoot(c);
+    await shoot(c);
+    await shoot(c);
     expect(sessions.session.pages.length, 2);
     expect(c.state.limitReached, isTrue);
     expect(events.map((DocScanEvent e) => e.name), contains('scan_page_limit_reached'));
@@ -143,14 +152,14 @@ void main() {
     final CaptureCubit first = cubit();
     await first.start();
     first.setMode(CaptureMode.manual);
-    await first.capture();
+    await shoot(first);
     await first.close();
     final String id = sessions.session.pages.single.id;
 
     camera = FakeCameraSource(outDir: tmp);
     final CaptureCubit retake = cubit(replacing: id);
     await retake.start();
-    await retake.capture();
+    await shoot(retake);
     expect(sessions.session.pages.length, 1);
     expect(sessions.session.pages.single.id, id);
     expect(retake.state.replaced, isTrue);
@@ -161,6 +170,7 @@ void main() {
   test('a new page in the same place re-arms auto capture (a stack of pages)', () async {
     final CaptureCubit c = cubit();
     await c.start();
+    c.setMode(CaptureMode.auto);
     edges.next = FrameAnalysis(quad: page, sharpness: 200, luminance: 140, signature: List<int>.filled(256, 200));
     await feed(8);
     if (c.state.pageCount == 0) {
@@ -190,8 +200,46 @@ void main() {
     final CaptureCubit c = cubit();
     await c.start();
     c.setMode(CaptureMode.manual);
-    await c.capture();
+    await shoot(c);
     expect(sessions.session.pages.single.corners, still);
+    await c.close();
+  });
+
+  test('manual capture is the default and stops on the corner step', () async {
+    final CaptureCubit c = cubit();
+    await c.start();
+    expect(c.state.mode, CaptureMode.manual);
+    await feed(1);
+    await c.capture();
+    expect(c.state.adjustFile, isNotNull);
+    expect(c.state.adjustQuad, page);
+    expect(sessions.session.pages, isEmpty);
+    // A second tap while the corner step is open takes nothing.
+    await c.capture();
+    expect(camera.pictures, 1);
+    await c.close();
+  });
+
+  test('«حفظ الصفحة» keeps the dragged corners; «إعادة الالتقاط» drops the photo', () async {
+    const Quad dragged = Quad(
+      topLeft: Offset(0.15, 0.12),
+      topRight: Offset(0.85, 0.1),
+      bottomRight: Offset(0.9, 0.88),
+      bottomLeft: Offset(0.1, 0.9),
+    );
+    final CaptureCubit c = cubit();
+    await c.start();
+    await c.capture();
+    final File photo = c.state.adjustFile!;
+    await c.retakeAdjusted();
+    expect(c.state.adjustFile, isNull);
+    expect(photo.existsSync(), isFalse);
+    expect(sessions.session.pages, isEmpty);
+
+    await c.capture();
+    await c.keepAdjusted(dragged);
+    expect(c.state.adjustFile, isNull);
+    expect(sessions.session.pages.single.corners, dragged);
     await c.close();
   });
 }

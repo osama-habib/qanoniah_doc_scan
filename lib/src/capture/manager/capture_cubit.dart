@@ -43,6 +43,11 @@ abstract class CaptureState with _$CaptureState {
 
     /// Replace mode only: the replacement was taken, so the flow returns to review.
     @Default(false) bool replaced,
+
+    /// Manual capture: the photo waiting for «حفظ الصفحة» or «إعادة الالتقاط»,
+    /// with the corners found on it (design `scanAdj`).
+    File? adjustFile,
+    Quad? adjustQuad,
   }) = _CaptureState;
 }
 
@@ -144,37 +149,76 @@ class CaptureCubit extends Cubit<CaptureState> {
   Future<void> pauseCamera() => _camera.pause();
   Future<void> resumeCamera() => _camera.resume();
 
-  /// Manual capture; also what auto mode calls.
+  /// Manual capture; also what auto mode calls. A manual capture stops on the
+  /// corner step first; an auto capture stores the page at once.
   Future<void> capture() async {
-    if (state.capturing || state.limitReached || state.phase != CapturePhase.ready || state.replaced) {
+    if (state.capturing ||
+        state.limitReached ||
+        state.phase != CapturePhase.ready ||
+        state.replaced ||
+        state.adjustFile != null) {
       return;
     }
+    final bool adjust = state.mode == CaptureMode.manual;
     emit(state.copyWith(capturing: true));
     final Quad corners = state.quad ?? Quad.fullFrame;
     final Either<CameraFailure, File> shot = await _camera.takePicture();
     if (isClosed) return;
     await shot.fold(
       (CameraFailure _) async => emit(state.copyWith(capturing: false, phase: CapturePhase.unavailable)),
-      (File file) => _store(file, corners),
+      (File file) async {
+        final File? raw = await _keepRaw(file);
+        if (raw == null || isClosed) return;
+        // Like a scanner: find the page again on the full-resolution photo; the
+        // live frame's corners are the fallback, the whole photo the last resort.
+        final Quad found = await _edges.detectInPhoto(raw) ?? corners;
+        if (isClosed) return;
+        if (!adjust) return _store(raw, found);
+        await _camera.pause();
+        if (isClosed) return;
+        emit(state.copyWith(capturing: false, shots: state.shots + 1, adjustFile: raw, adjustQuad: found));
+      },
     );
+  }
+
+  /// «حفظ الصفحة» on the corner step.
+  Future<void> keepAdjusted(Quad corners) async {
+    final File? raw = state.adjustFile;
+    if (raw == null || state.capturing) return;
+    emit(state.copyWith(capturing: true, adjustFile: null, adjustQuad: null));
+    await _camera.resume();
+    if (isClosed) return;
+    await _store(raw, corners);
+  }
+
+  /// «إعادة الالتقاط» on the corner step: the photo is dropped.
+  Future<void> retakeAdjusted() async {
+    final File? raw = state.adjustFile;
+    if (raw == null) return;
+    emit(state.copyWith(adjustFile: null, adjustQuad: null));
+    try {
+      await raw.delete();
+    } on FileSystemException catch (_) {}
+    await _camera.resume();
   }
 
   /// Tells the session nothing; the flow decides between back-to-review and cancel.
   void cancelled() => _onEvent(DocScanEvent.cancelled(step: ScanStep.capture));
 
-  Future<void> _store(File shot, Quad corners) async {
+  /// Moves the camera's photo into the session folder.
+  Future<File?> _keepRaw(File shot) async {
     final File raw = _sessions.newFile('jpg');
     try {
       await shot.copy(raw.path);
       await shot.delete();
     } on FileSystemException catch (e) {
-      return _storageError(e);
+      _storageError(e);
+      return null;
     }
-    // Like a scanner: find the page again on the full-resolution photo; the live
-    // frame's corners are the fallback, the whole photo the last resort.
-    final Quad found = await _edges.detectInPhoto(raw) ?? corners;
-    if (isClosed) return;
-    corners = found;
+    return raw;
+  }
+
+  Future<void> _store(File raw, Quad corners) async {
     final File prepared = _sessions.newFile('jpg');
     final File ocr = _sessions.newFile('png');
     final Either<StorageFailure, Unit> ok = await _preparer.prepare(
@@ -217,7 +261,7 @@ class CaptureCubit extends Cubit<CaptureState> {
     emit(
       state.copyWith(
         capturing: false,
-        shots: state.shots + 1,
+        shots: state.mode == CaptureMode.manual ? state.shots : state.shots + 1,
         pageCount: s.pages.length,
         lastThumbnail: prepared,
         hint: state.mode == CaptureMode.auto ? CaptureHint.nextPage : CaptureHint.manual,
@@ -228,7 +272,7 @@ class CaptureCubit extends Cubit<CaptureState> {
   }
 
   Future<void> _onFrame(CameraFrame frame) async {
-    if (state.capturing || state.phase != CapturePhase.ready) return;
+    if (state.capturing || state.phase != CapturePhase.ready || state.adjustFile != null) return;
     final FrameAnalysis a = await _edges.analyze(frame);
     if (isClosed || state.capturing) return;
     final Quad? q = a.quad;
@@ -287,8 +331,7 @@ class CaptureCubit extends Cubit<CaptureState> {
     _steadySince = null;
   }
 
-  static CaptureHint _idleHint(CaptureMode mode) =>
-      mode == CaptureMode.auto ? CaptureHint.auto : CaptureHint.manual;
+  static CaptureHint _idleHint(CaptureMode mode) => mode == CaptureMode.auto ? CaptureHint.auto : CaptureHint.manual;
 
   static bool _atLimit(ScanSession s) => s.maxPages != null && s.pages.length >= s.maxPages!;
 

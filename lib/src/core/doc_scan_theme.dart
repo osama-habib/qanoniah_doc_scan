@@ -29,6 +29,9 @@ class DocScanTheme extends ThemeExtension<DocScanTheme> {
     required this.onRedactionFill,
     required this.danger,
     required this.scrim,
+    required this.canvas,
+    required this.surfaceTertiary,
+    required this.inverseSurface,
     required this.titleStyle,
     required this.bodyStyle,
     required this.bodyStrongStyle,
@@ -72,6 +75,15 @@ class DocScanTheme extends ThemeExtension<DocScanTheme> {
   final Color onRedactionFill;
   final Color danger;
   final Color scrim;
+
+  /// Behind the preview's pages (design #e5e7eb).
+  final Color canvas;
+
+  /// Round icon buttons on light screens (design #f3f4f6).
+  final Color surfaceTertiary;
+
+  /// The floating selection bar (design #111827).
+  final Color inverseSurface;
 
   final TextStyle titleStyle;
   final TextStyle bodyStyle;
@@ -130,6 +142,9 @@ class DocScanTheme extends ThemeExtension<DocScanTheme> {
     Color? onRedactionFill,
     Color? danger,
     Color? scrim,
+    Color? canvas,
+    Color? surfaceTertiary,
+    Color? inverseSurface,
     TextStyle? titleStyle,
     TextStyle? bodyStyle,
     TextStyle? bodyStrongStyle,
@@ -167,6 +182,9 @@ class DocScanTheme extends ThemeExtension<DocScanTheme> {
       onRedactionFill: onRedactionFill ?? this.onRedactionFill,
       danger: danger ?? this.danger,
       scrim: scrim ?? this.scrim,
+      canvas: canvas ?? this.canvas,
+      surfaceTertiary: surfaceTertiary ?? this.surfaceTertiary,
+      inverseSurface: inverseSurface ?? this.inverseSurface,
       titleStyle: titleStyle ?? this.titleStyle,
       bodyStyle: bodyStyle ?? this.bodyStyle,
       bodyStrongStyle: bodyStrongStyle ?? this.bodyStrongStyle,
@@ -212,6 +230,9 @@ class DocScanTheme extends ThemeExtension<DocScanTheme> {
       onRedactionFill: c(onRedactionFill, other.onRedactionFill),
       danger: c(danger, other.danger),
       scrim: c(scrim, other.scrim),
+      canvas: c(canvas, other.canvas),
+      surfaceTertiary: c(surfaceTertiary, other.surfaceTertiary),
+      inverseSurface: c(inverseSurface, other.inverseSurface),
       titleStyle: s(titleStyle, other.titleStyle),
       bodyStyle: s(bodyStyle, other.bodyStyle),
       bodyStrongStyle: s(bodyStrongStyle, other.bodyStrongStyle),

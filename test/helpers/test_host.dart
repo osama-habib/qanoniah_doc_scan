@@ -18,6 +18,7 @@ const DocScanIcons testIcons = DocScanIcons(
   close: 'i.svg', capture: 'i.svg', autoMode: 'i.svg', manualMode: 'i.svg', addPage: 'i.svg',
   retake: 'i.svg', delete: 'i.svg', crop: 'i.svg', filters: 'i.svg', redact: 'i.svg',
   reveal: 'i.svg', edit: 'i.svg', document: 'i.svg', back: 'i.svg', done: 'i.svg', photoView: 'i.svg',
+  undo: 'i.svg', dragHandle: 'i.svg', pages: 'i.svg', search: 'i.svg', chevronUp: 'i.svg', chevronDown: 'i.svg', pdf: 'i.svg',
 );
 
 const DocScanTheme testTheme = DocScanTheme(
@@ -27,6 +28,7 @@ const DocScanTheme testTheme = DocScanTheme(
   onSurfaceMuted: Color(0xff777777), border: Color(0xffdddddd), primary: Color(0xff0a1c6d),
   onPrimary: Color(0xffffffff), redactionFill: Color(0xff222222), onRedactionFill: Color(0xffffffff),
   danger: Color(0xffdc2626), scrim: Color(0x99000000),
+  canvas: Color(0xffe5e7eb), surfaceTertiary: Color(0xfff3f4f6), inverseSurface: Color(0xff111827),
   titleStyle: _s, bodyStyle: _s, bodyStrongStyle: _s, captionStyle: _s, buttonStyle: _s,
   spaceXs: 4, spaceSm: 8, spaceMd: 12, spaceLg: 16, spaceXl: 32,
   radiusSm: 12, radiusMd: 12, radiusLg: 20, radiusSheet: 20,

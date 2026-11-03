@@ -8,6 +8,8 @@ import '../../core/session/scan_session.dart';
 import '../manager/preview_cubit.dart';
 import 'text_page_view.dart';
 
+// TODO(unused): the design has no edit mode; «تعديل» on a selection opens
+// the paragraph in place (TextPageView). Kept for paragraph redaction.
 /// Edit mode: every paragraph is a text field; the eye button redacts it whole
 /// (stories 7 and 9).
 class EditModeView extends StatelessWidget {

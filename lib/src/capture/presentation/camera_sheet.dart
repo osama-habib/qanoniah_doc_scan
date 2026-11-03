@@ -1,10 +1,11 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
-import '../../core/doc_scan_icons.dart';
+import '../../core/scan_metrics.dart';
 import '../../core/doc_scan_strings.dart';
 import '../../core/doc_scan_theme.dart';
 import '../../core/presentation/scan_widgets.dart';
@@ -12,6 +13,7 @@ import '../../core/session/scan_session.dart';
 import '../manager/capture_cubit.dart';
 import 'camera_permission_view.dart';
 import 'capture_feedback.dart';
+import 'corner_editor.dart';
 import 'edge_frame_overlay.dart';
 
 /// The dark camera sheet (story 2). Reads [CaptureCubit]; holds no logic.
@@ -39,8 +41,6 @@ class CameraSheet extends StatefulWidget {
 
 class _CameraSheetState extends State<CameraSheet> with WidgetsBindingObserver {
   double _drag = 0;
-  bool _toast = false;
-  Timer? _toastTimer;
   bool? _lastDetected;
 
   @override
@@ -63,7 +63,6 @@ class _CameraSheetState extends State<CameraSheet> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _toastTimer?.cancel();
     super.dispose();
   }
 
@@ -82,14 +81,20 @@ class _CameraSheetState extends State<CameraSheet> with WidgetsBindingObserver {
 
   void _onShot(BuildContext context, CaptureState s) {
     if (MediaQuery.maybeOf(context)?.accessibleNavigation ?? false) {
-      // ignore: deprecated_member_use
-      unawaited(SemanticsService.announce(widget.strings.announcePageCaptured(s.pageCount), Directionality.of(context)));
+      unawaited(
+        // ignore: deprecated_member_use
+        SemanticsService.announce(widget.strings.announcePageCaptured(s.pageCount), Directionality.of(context)),
+      );
     }
-    setState(() => _toast = true);
-    _toastTimer?.cancel();
-    _toastTimer = Timer(const Duration(milliseconds: 1400), () {
-      if (mounted) setState(() => _toast = false);
-    });
+  }
+
+  /// The corners being dragged on the corner step; null until the user drags.
+  Quad? _adjusted;
+
+  void _keep(CaptureCubit cubit) {
+    final Quad? q = _adjusted ?? cubit.state.adjustQuad;
+    setState(() => _adjusted = null);
+    if (q != null) unawaited(cubit.keepAdjusted(q));
   }
 
   @override
@@ -133,18 +138,29 @@ class _CameraSheetState extends State<CameraSheet> with WidgetsBindingObserver {
                       },
                       child: Column(
                         children: <Widget>[
-                          ScanSheetHandle(color: t.onCameraSurfaceMuted),
+                          ScanSheetHandle(color: t.onCameraSurface.withValues(alpha: 0.45)),
                           ScanHeader(
                             title: s.scanTitle,
                             color: t.onCameraSurface,
-                            leading: ScanQuietButton(label: s.cancel, onPressed: widget.onCancel, color: t.onCameraSurface),
+                            leading: ScanQuietButton(
+                              label: s.cancel,
+                              onPressed: widget.onCancel,
+                              color: t.onCameraSurface,
+                              textStyle: t.bodyStyle.sized(15, 22),
+                            ),
                           ),
                         ],
                       ),
                     ),
                     Expanded(
                       child: st.phase == CapturePhase.ready
-                          ? _Viewfinder(state: st, preview: widget.preview, toast: _toast, strings: s)
+                          ? _Viewfinder(
+                              state: st,
+                              preview: widget.preview,
+                              strings: s,
+                              adjusted: _adjusted,
+                              onAdjust: (Quad q) => setState(() => _adjusted = q),
+                            )
                           : CameraPermissionView(
                               phase: st.phase,
                               strings: s,
@@ -152,7 +168,17 @@ class _CameraSheetState extends State<CameraSheet> with WidgetsBindingObserver {
                               onOpenSettings: cubit.openSettings,
                             ),
                     ),
-                    _BottomBar(state: st, strings: s, onReview: widget.onReview),
+                    if (st.adjustFile != null)
+                      _AdjustBar(
+                        strings: s,
+                        onRetake: () {
+                          setState(() => _adjusted = null);
+                          unawaited(cubit.retakeAdjusted());
+                        },
+                        onKeep: () => _keep(cubit),
+                      )
+                    else
+                      _BottomBar(state: st, strings: s, onReview: widget.onReview),
                   ],
                 );
               },
@@ -165,20 +191,21 @@ class _CameraSheetState extends State<CameraSheet> with WidgetsBindingObserver {
 }
 
 class _Viewfinder extends StatelessWidget {
-  const _Viewfinder({required this.state, required this.preview, required this.toast, required this.strings});
+  const _Viewfinder({
+    required this.state,
+    required this.preview,
+    required this.strings,
+    required this.adjusted,
+    required this.onAdjust,
+  });
 
   final CaptureState state;
   final Widget Function() preview;
-  final bool toast;
   final DocScanStrings strings;
 
-  String _hint() => switch (state.hint) {
-    CaptureHint.auto => strings.hintAuto,
-    CaptureHint.manual => strings.hintManual,
-    CaptureHint.nextPage => strings.hintNextPage,
-    CaptureHint.lowLight => strings.hintLowLight,
-    CaptureHint.holdSteady => strings.hintHoldSteady,
-  };
+  /// The corner step's corners once the user dragged one.
+  final Quad? adjusted;
+  final ValueChanged<Quad> onAdjust;
 
   @override
   Widget build(BuildContext context) {
@@ -186,65 +213,74 @@ class _Viewfinder extends StatelessWidget {
     final String? message = state.limitReached
         ? strings.pageLimitReached(state.pageCount)
         : (state.storageFull ? strings.storageFull : null);
-    return Column(
-      children: <Widget>[
-        Expanded(
-          child: Padding(
-            padding: EdgeInsets.symmetric(horizontal: t.spaceMd),
-            child: Center(
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(t.radiusLg),
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: <Widget>[
-                    preview(),
-                    Positioned.fill(
-                      child: EdgeFrameOverlay(
-                        quad: state.quad,
-                        color: state.quad == null ? t.frameSearching : t.frameDetected,
-                        strokeWidth: t.frameStrokeWidth,
-                        fill: t.frameDetected.withValues(alpha: 0.12),
-                      ),
+    final File? adjust = state.adjustFile;
+    // Design: the live picture fills the width on black, 8 above the bottom bar.
+    return Padding(
+      padding: EdgeInsets.only(bottom: t.spaceSm),
+      child: ColoredBox(
+        color: t.cameraSurface,
+        child: Stack(
+          fit: StackFit.expand,
+          children: <Widget>[
+            Center(
+              child: Stack(
+                alignment: Alignment.center,
+                children: <Widget>[
+                  preview(),
+                  Positioned.fill(
+                    child: EdgeFrameOverlay(
+                      quad: state.quad,
+                      color: t.frameDetected,
+                      strokeWidth: 2.5,
+                      fill: t.frameDetected.withValues(alpha: 0.2),
                     ),
-                    Positioned.fill(child: CaptureFlash(shots: state.shots, color: t.captureFlash)),
-                    PositionedDirectional(
-                      top: t.spaceMd,
-                      start: t.spaceMd,
-                      end: t.spaceMd,
-                      child: AnimatedOpacity(
-                        opacity: toast ? 1 : 0,
-                        duration: const Duration(milliseconds: 200),
-                        child: Center(
-                          child: Container(
-                            padding: EdgeInsets.symmetric(horizontal: t.spaceMd, vertical: t.spaceXs),
-                            decoration: BoxDecoration(color: t.scrim, borderRadius: BorderRadius.circular(t.radiusLg)),
-                            child: Text(strings.pageCaptured, style: t.captionStyle.copyWith(color: t.onCameraSurface)),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
-          ),
-        ),
-        Padding(
-          padding: EdgeInsets.all(t.spaceMd),
-          child: Semantics(
-            liveRegion: true,
-            child: Text(
-              message ?? _hint(),
-              style: t.bodyStyle.copyWith(color: message == null ? t.onCameraSurface : t.danger),
-              textAlign: TextAlign.center,
+            if (adjust != null)
+              ColoredBox(
+                color: t.cameraSurface,
+                child: CornerEditor(
+                  key: ValueKey<String>(adjust.path),
+                  photo: adjust,
+                  quad: adjusted ?? state.adjustQuad ?? Quad.fullFrame,
+                  strings: strings,
+                  onChanged: onAdjust,
+                ),
+              ),
+            Positioned.fill(
+              child: CaptureFlash(shots: state.shots, color: t.captureFlash),
             ),
-          ),
+            if (message != null)
+              PositionedDirectional(
+                bottom: t.spaceMd,
+                start: t.spaceMd,
+                end: t.spaceMd,
+                child: Semantics(
+                  liveRegion: true,
+                  child: Center(
+                    child: Container(
+                      padding: EdgeInsets.symmetric(horizontal: t.spaceMd, vertical: t.spaceXs),
+                      decoration: BoxDecoration(color: t.scrim, borderRadius: BorderRadius.circular(t.radiusLg)),
+                      child: Text(
+                        message,
+                        style: t.captionStyle.copyWith(color: t.onCameraSurface),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
         ),
-      ],
+      ),
     );
   }
 }
 
+/// Design camera bottom bar: 12 / 24 / 40 padding, the page stack at the start,
+/// the shutter in the middle, «حفظ (N)» at the end.
 class _BottomBar extends StatelessWidget {
   const _BottomBar({required this.state, required this.strings, required this.onReview});
 
@@ -254,53 +290,37 @@ class _BottomBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final DocScanTheme t = DocScanTheme.of(context);
     final CaptureCubit cubit = context.read<CaptureCubit>();
     final bool ready = state.phase == CapturePhase.ready;
+    final bool hasPages = state.pageCount > 0;
     return Padding(
-      padding: EdgeInsets.fromLTRB(t.spaceLg, t.spaceSm, t.spaceLg, t.spaceLg),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
+      padding: ScanMetrics.cameraBar,
+      child: Row(
         children: <Widget>[
-          if (ready)
-            ScanSegmented<CaptureMode>(
-              options: <CaptureMode, String>{CaptureMode.auto: strings.modeAuto, CaptureMode.manual: strings.modeManual},
-              selected: state.mode,
-              onChanged: cubit.setMode,
-              foreground: t.onCameraSurfaceMuted,
-              selectedForeground: t.cameraSurface,
-              selectedBackground: t.onCameraSurface,
-              background: t.scrim,
+          Expanded(
+            child: Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: PageThumbnailBadge(
+                file: state.lastThumbnail,
+                count: state.pageCount,
+                shots: state.shots,
+                label: strings.reviewPages,
+                onTap: hasPages ? onReview : null,
+              ),
             ),
-          SizedBox(height: t.spaceMd),
-          Row(
-            children: <Widget>[
-              Expanded(
-                child: Align(
-                  alignment: AlignmentDirectional.centerStart,
-                  child: PageThumbnailBadge(
-                    file: state.lastThumbnail,
-                    count: state.pageCount,
-                    shots: state.shots,
-                    label: strings.reviewPages,
-                    onTap: state.pageCount > 0 ? onReview : null,
-                  ),
-                ),
-              ),
-              _Shutter(
-                label: strings.capture,
-                enabled: ready && !state.capturing && !state.limitReached,
-                onTap: cubit.capture,
-              ),
-              Expanded(
-                child: Align(
-                  alignment: AlignmentDirectional.centerEnd,
-                  child: state.pageCount > 0
-                      ? ScanQuietButton(label: strings.reviewPages, onPressed: onReview, color: t.onCameraSurface)
-                      : const SizedBox.shrink(),
-                ),
-              ),
-            ],
+          ),
+          _Shutter(
+            label: strings.capture,
+            enabled: ready && !state.capturing && !state.limitReached,
+            onTap: cubit.capture,
+          ),
+          Expanded(
+            child: Align(
+              alignment: AlignmentDirectional.centerEnd,
+              child: hasPages
+                  ? _Pill(label: strings.saveCount(state.pageCount), height: 40, padding: 16, onTap: onReview)
+                  : const SizedBox.shrink(),
+            ),
           ),
         ],
       ),
@@ -308,6 +328,82 @@ class _BottomBar extends StatelessWidget {
   }
 }
 
+/// The corner step's bar: «إعادة الالتقاط» and «حفظ الصفحة» (design `scanAdjOn`).
+class _AdjustBar extends StatelessWidget {
+  const _AdjustBar({required this.strings, required this.onRetake, required this.onKeep});
+
+  final DocScanStrings strings;
+  final VoidCallback onRetake;
+  final VoidCallback onKeep;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: ScanMetrics.cameraBar,
+      child: SizedBox(
+        height: 72,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: <Widget>[
+            _Pill(label: strings.retake, height: 44, padding: 18, quiet: true, onTap: onRetake),
+            _Pill(label: strings.savePage, height: 44, padding: 20, onTap: onKeep),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// A white pill with navy text, or a translucent one with white text.
+class _Pill extends StatelessWidget {
+  const _Pill({
+    required this.label,
+    required this.height,
+    required this.padding,
+    required this.onTap,
+    this.quiet = false,
+  });
+
+  final String label;
+  final double height;
+  final double padding;
+  final bool quiet;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final DocScanTheme t = DocScanTheme.of(context);
+    return Semantics(
+      button: true,
+      child: Material(
+        color: quiet ? t.onCameraSurface.withValues(alpha: 0.14) : t.onCameraSurface,
+        shape: const StadiumBorder(),
+        child: InkWell(
+          customBorder: const StadiumBorder(),
+          onTap: onTap,
+          child: Container(
+            height: height,
+            padding: EdgeInsets.symmetric(horizontal: padding),
+            alignment: Alignment.center,
+            child: Text(
+              label,
+              maxLines: 1,
+              softWrap: false,
+              style: t.buttonStyle
+                  .sized(14, 20)
+                  .copyWith(
+                    fontWeight: quiet ? FontWeight.w500 : FontWeight.w700,
+                    color: quiet ? t.onCameraSurface : t.primary,
+                  ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Design shutter: a 72 ring with a 4 white border around a 58 white disc.
 class _Shutter extends StatelessWidget {
   const _Shutter({required this.label, required this.enabled, required this.onTap});
 
@@ -318,7 +414,6 @@ class _Shutter extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final DocScanTheme t = DocScanTheme.of(context);
-    final double size = t.thumbnailSize * 1.2;
     return Semantics(
       button: true,
       enabled: enabled,
@@ -327,19 +422,20 @@ class _Shutter extends StatelessWidget {
       child: GestureDetector(
         onTap: enabled ? onTap : null,
         child: Container(
-          width: size,
-          height: size,
-          padding: EdgeInsets.all(t.spaceXs),
+          width: 72,
+          height: 72,
+          alignment: Alignment.center,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            border: Border.all(color: t.onCameraSurface, width: t.frameStrokeWidth),
+            border: Border.all(color: t.onCameraSurface, width: 4),
           ),
-          child: DecoratedBox(
+          child: Container(
+            width: 58,
+            height: 58,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: enabled ? t.onCameraSurface : t.onCameraSurfaceMuted,
             ),
-            child: Center(child: DocScanIcon(t.icons.capture, size: t.iconSize, color: t.cameraSurface)),
           ),
         ),
       ),

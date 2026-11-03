@@ -3,8 +3,10 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:printing/printing.dart';
 
+import '../../core/scan_metrics.dart';
 import '../../core/doc_scan_strings.dart';
 import '../../core/doc_scan_theme.dart';
 import '../../core/presentation/scan_widgets.dart';
@@ -63,38 +65,89 @@ class _DocScanViewerState extends State<DocScanViewer> {
   @override
   Widget build(BuildContext context) {
     final DocScanTheme t = DocScanTheme.of(context);
-    final DocScanStrings s = widget.strings ??
+    final DocScanStrings s =
+        widget.strings ??
         (Localizations.localeOf(context).languageCode == 'ar' ? DocScanStrings.ar() : DocScanStrings.en());
+    final TextStyle name = t.bodyStyle.sized(14, 20).copyWith(color: t.onSurface, fontWeight: FontWeight.w700);
+    // Design `scanViewOnly`: the preview's header with ✕, no tip and no attach.
     return Scaffold(
-      backgroundColor: t.surfaceSecondary,
+      backgroundColor: t.surface,
       body: SafeArea(
         child: Column(
           children: <Widget>[
-            ScanHeader(
-              title: widget.fileName,
-              leading: ScanIconButton(
-                icon: t.icons.close,
-                label: s.close,
-                color: t.onSurface,
-                onPressed: () => Navigator.of(context).maybePop(),
+            Container(
+              padding: ScanMetrics.header,
+              decoration: BoxDecoration(
+                border: Border(bottom: BorderSide(color: t.surfaceTertiary)),
+              ),
+              child: Row(
+                children: <Widget>[
+                  ScanIconButton(
+                    icon: t.icons.close,
+                    label: s.close,
+                    size: 16,
+                    color: t.onSurface,
+                    background: t.surfaceTertiary,
+                    onPressed: () => Navigator.of(context).maybePop(),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Semantics(
+                      header: true,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: <Widget>[
+                          SvgPicture.asset(t.icons.pdf, width: 18, height: 22),
+                          const SizedBox(width: 8),
+                          Flexible(
+                            child: Text(widget.fileName, style: name, maxLines: 1, overflow: TextOverflow.ellipsis),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    _done ? s.pageCount(_pages.length) : '',
+                    style: t.captionStyle.sized(12, 16).copyWith(color: t.onSurfaceMuted),
+                  ),
+                  const SizedBox(width: 36),
+                ],
               ),
             ),
             Expanded(
-              child: _pages.isEmpty && !_done
-                  ? Center(child: CircularProgressIndicator(color: t.primary))
-                  : ListView.separated(
-                      padding: EdgeInsets.all(t.spaceMd),
-                      itemCount: _pages.length,
-                      separatorBuilder: (BuildContext context, int _) => SizedBox(height: t.spaceMd),
-                      itemBuilder: (BuildContext context, int i) => Semantics(
-                        image: true,
-                        label: s.pageLabel(i + 1),
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(color: t.surface, border: Border.all(color: t.border)),
-                          child: Image.memory(_pages[i], fit: BoxFit.fitWidth),
+              child: ColoredBox(
+                color: t.canvas,
+                child: _pages.isEmpty && !_done
+                    ? Center(child: CircularProgressIndicator(color: t.primary))
+                    : ListView.separated(
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                        itemCount: _pages.length,
+                        separatorBuilder: (BuildContext context, int _) => const SizedBox(height: 14),
+                        itemBuilder: (BuildContext context, int i) => Semantics(
+                          image: true,
+                          label: s.pageLabel(i + 1),
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              color: t.surface,
+                              boxShadow: <BoxShadow>[
+                                BoxShadow(
+                                  color: t.inverseSurface.withValues(alpha: 0.08),
+                                  blurRadius: 2,
+                                  offset: const Offset(0, 1),
+                                ),
+                                BoxShadow(
+                                  color: t.inverseSurface.withValues(alpha: 0.08),
+                                  blurRadius: 16,
+                                  offset: const Offset(0, 6),
+                                ),
+                              ],
+                            ),
+                            child: Image.memory(_pages[i], fit: BoxFit.fitWidth),
+                          ),
                         ),
                       ),
-                    ),
+              ),
             ),
           ],
         ),

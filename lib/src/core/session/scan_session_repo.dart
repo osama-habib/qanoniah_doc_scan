@@ -59,7 +59,7 @@ class ScanSessionRepo {
           id: id,
           dir: dir,
           pages: const <CapturedPage>[],
-          captureMode: CaptureMode.auto,
+          captureMode: CaptureMode.manual,
           startedAt: _now(),
           maxPages: maxPages,
         ),

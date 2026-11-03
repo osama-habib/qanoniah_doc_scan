@@ -109,16 +109,21 @@ void main() {
     ),
   );
 
+  /// Shutter, then «حفظ الصفحة» on the corner step.
+  Future<void> capturePage(WidgetTester t) async {
+    await t.tap(find.bySemanticsLabel('التقاط'));
+    await settle(t, find.text('حفظ الصفحة'));
+    await t.tap(find.text('حفظ الصفحة'));
+    await settle(t, find.text('حفظ (1)'));
+  }
+
   testWidgets('capture, review, build, preview, attach returns one PDF and cleans up', (WidgetTester t) async {
     late Future<DocScanResult?> result;
     await t.pumpWidget(host((Future<DocScanResult?> f) => result = f));
     await t.tap(find.text('scan'));
-    await settle(t, find.text('يدوي'));
-    await t.tap(find.text('يدوي'));
-    await t.pump();
-    await t.tap(find.bySemanticsLabel('التقاط'));
-    await settle(t, find.bySemanticsLabel('مراجعة الصفحات'));
-    await t.tap(find.bySemanticsLabel('مراجعة الصفحات').last);
+    await settle(t, find.bySemanticsLabel('التقاط'));
+    await capturePage(t);
+    await t.tap(find.text('حفظ (1)'));
     // The camera hands over to «توضيح الصفحات»; «التالي» goes to review.
     await settle(t, find.text('توضيح الصفحات'));
     expect(find.text('صفحة 1 / 1'), findsOneWidget);
@@ -126,8 +131,8 @@ void main() {
     await settle(t, find.bySemanticsLabel('إنشاء مستند قابل للتعديل'));
     expect(find.bySemanticsLabel('إرفاق كملف PDF'), findsOneWidget);
     await t.tap(find.bySemanticsLabel('إنشاء مستند قابل للتعديل'));
-    await settle(t, find.text('معاينة ملف PDF'), tries: 200);
-    expect(find.text('حكم'), findsOneWidget);
+    await settle(t, find.bySemanticsLabel('معاينة ملف PDF'), tries: 200);
+    expect(find.text('حكم'), findsWidgets);
     await t.pump(const Duration(milliseconds: 300));
     await t.tap(find.text('إرفاق كملف PDF').last);
     DocScanResult? r;
@@ -155,7 +160,7 @@ void main() {
     await t.pumpWidget(host((Future<DocScanResult?> f) => result = f));
     ctx = t.element(find.text('scan'));
     await t.tap(find.text('scan'));
-    await settle(t, find.text('يدوي'));
+    await settle(t, find.bySemanticsLabel('التقاط'));
     expect(() => DocScan.start(ctx, config()), throwsStateError);
     await t.tap(find.text('إلغاء'));
     await settle(t, find.text('scan'));
@@ -169,11 +174,8 @@ void main() {
     late Future<DocScanResult?> result;
     await t.pumpWidget(host((Future<DocScanResult?> f) => result = f));
     await t.tap(find.text('scan'));
-    await settle(t, find.text('يدوي'));
-    await t.tap(find.text('يدوي'));
-    await t.pump();
-    await t.tap(find.bySemanticsLabel('التقاط'));
-    await settle(t, find.bySemanticsLabel('مراجعة الصفحات'));
+    await settle(t, find.bySemanticsLabel('التقاط'));
+    await capturePage(t);
     await t.tap(find.text('إلغاء'));
     await settle(t, find.text('اسحب الصفحة لتغيير ترتيبها في الملف.'));
     expect(sessionDirs(), hasLength(1));
@@ -189,17 +191,15 @@ void main() {
   testWidgets('«إرفاق كملف PDF» on review goes straight to the photo preview', (WidgetTester t) async {
     await t.pumpWidget(host((Future<DocScanResult?> _) {}));
     await t.tap(find.text('scan'));
-    await settle(t, find.text('يدوي'));
-    await t.tap(find.text('يدوي'));
-    await t.pump();
-    await t.tap(find.bySemanticsLabel('التقاط'));
-    await settle(t, find.bySemanticsLabel('مراجعة الصفحات'));
-    await t.tap(find.bySemanticsLabel('مراجعة الصفحات').last);
+    await settle(t, find.bySemanticsLabel('التقاط'));
+    await capturePage(t);
+    await t.tap(find.text('حفظ (1)'));
     await settle(t, find.text('التالي'));
     await t.tap(find.text('التالي'));
     await settle(t, find.bySemanticsLabel('إرفاق كملف PDF'));
     await t.tap(find.bySemanticsLabel('إرفاق كملف PDF'));
-    await settle(t, find.text('لون المسح'), tries: 200);
-    expect(find.text('معاينة ملف PDF'), findsOneWidget);
+    await settle(t, find.bySemanticsLabel('معاينة ملف PDF'), tries: 200);
+    // Photo pages: no text tip, no word selection.
+    expect(find.text('يمكنك تحديد أي نص لحجبه أو تعديله قبل الإرسال.'), findsNothing);
   });
 }
