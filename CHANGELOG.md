@@ -1,3 +1,12 @@
+## 0.4.0
+
+* Matches the current design: after the camera comes «توضيح الصفحات», a full-screen filter step
+  (page with previous/next, six combinable filters previewed on the page, «تطبيق على كل
+  الصفحات» on by default, «التالي» to review).
+* Review: dashed «إضافة صفحة» tile at the end of the grid, back to the filters, and a second
+  action «إرفاق كملف PDF» that attaches the photos as one PDF straight from the preview.
+* Fixed: the filter strip overflowed by a few pixels at some text sizes.
+
 ## 0.3.0
 
 * Text-form PDF (after an edit or redaction) is laid out by each platform's own text engine:

@@ -4,7 +4,7 @@
 #
 Pod::Spec.new do |s|
   s.name             = 'qanoniah_doc_scan'
-  s.version          = '0.2.0'
+  s.version          = '0.4.0'
   s.summary          = 'Qanoniah document scan: capture, review, OCR, redact, build one PDF.'
   s.description      = <<-DESC
 Qanoniah document scan: capture, review, OCR, redact, build one PDF.

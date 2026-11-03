@@ -40,6 +40,10 @@ class BuildCubit extends Cubit<BuildState> {
     required int maxFileBytes,
     required void Function(DocScanEvent) onEvent,
     DateTime Function()? now,
+
+    /// False for «إرفاق كملف PDF» from review: the photos go into the PDF at once,
+    /// with whatever text is already recognized in its text layer.
+    this.waitForText = true,
   }) : _sessions = sessions,
        _recognition = recognition,
        _fitter = fitter,
@@ -56,6 +60,7 @@ class BuildCubit extends Cubit<BuildState> {
   final int _maxFileBytes;
   final void Function(DocScanEvent) _onEvent;
   final DateTime Function() _now;
+  final bool waitForText;
   StreamSubscription<RecognitionProgress>? _progress;
 
   Future<void> start() async {
@@ -68,7 +73,7 @@ class BuildCubit extends Cubit<BuildState> {
     _progress = _recognition.progress.listen((RecognitionProgress p) {
       if (!isClosed && state.step == BuildStep.extract) emit(state.copyWith(progress: _fraction(p)));
     });
-    await _recognition.whenComplete();
+    if (waitForText) await _recognition.whenComplete();
     await _progress?.cancel();
     if (isClosed) return;
 

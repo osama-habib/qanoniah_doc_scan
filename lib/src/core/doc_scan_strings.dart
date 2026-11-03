@@ -49,6 +49,9 @@ class DocScanStrings {
     required this.savePage,
     required this.retake,
     required this.filtersTitle,
+    required this.filtersPanelTitle,
+    required this.next,
+    required this.pageOf,
     required this.filtersHint,
     required this.filterOriginal,
     required this.filterAuto,
@@ -135,6 +138,15 @@ class DocScanStrings {
   final String savePage;
   final String retake;
   final String filtersTitle;
+
+  /// «الفلاتر», the filter strip's heading on «توضيح الصفحات».
+  final String filtersPanelTitle;
+
+  /// «التالي»: from «توضيح الصفحات» to review.
+  final String next;
+
+  /// «صفحة 2 / 5».
+  final String Function(int number, int total) pageOf;
   final String filtersHint;
   final String filterOriginal;
   final String filterAuto;
@@ -237,6 +249,9 @@ class DocScanStrings {
       savePage: 'حفظ الصفحة',
       retake: 'إعادة الالتقاط',
       filtersTitle: 'توضيح الصفحات',
+      filtersPanelTitle: 'الفلاتر',
+      next: 'التالي',
+      pageOf: (int n, int total) => 'صفحة $n / $total',
       filtersHint:
           'يمكن الجمع بين أكثر من فلتر لتوضيح النص، وتُقرأ الصفحة بعد التحسين بدقة أعلى.',
       filterOriginal: 'الأصل',
@@ -331,6 +346,9 @@ class DocScanStrings {
       savePage: 'Save page',
       retake: 'Retake',
       filtersTitle: 'Enhance pages',
+      filtersPanelTitle: 'Filters',
+      next: 'Next',
+      pageOf: (int n, int total) => 'Page $n / $total',
       filtersHint:
           'Combine filters to make text clearer. The page is read more accurately after enhancing.',
       filterOriginal: 'Original',
@@ -420,6 +438,9 @@ class DocScanStrings {
     String? savePage,
     String? retake,
     String? filtersTitle,
+    String? filtersPanelTitle,
+    String? next,
+    String Function(int number, int total)? pageOf,
     String? filtersHint,
     String? filterOriginal,
     String? filterAuto,
@@ -505,6 +526,9 @@ class DocScanStrings {
       savePage: savePage ?? this.savePage,
       retake: retake ?? this.retake,
       filtersTitle: filtersTitle ?? this.filtersTitle,
+      filtersPanelTitle: filtersPanelTitle ?? this.filtersPanelTitle,
+      next: next ?? this.next,
+      pageOf: pageOf ?? this.pageOf,
       filtersHint: filtersHint ?? this.filtersHint,
       filterOriginal: filterOriginal ?? this.filterOriginal,
       filterAuto: filterAuto ?? this.filterAuto,

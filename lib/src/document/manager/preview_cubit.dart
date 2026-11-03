@@ -83,6 +83,7 @@ class PreviewCubit extends Cubit<PreviewState> {
     required String defaultStem,
     required void Function(DocScanEvent) onEvent,
     this.estimateDelay = const Duration(milliseconds: 500),
+    PreviewView initialView = PreviewView.text,
   }) : _sessions = sessions,
        _built = built,
        _fitter = fitter,
@@ -94,7 +95,7 @@ class PreviewCubit extends Cubit<PreviewState> {
          PreviewState(
            pages: sessions.session.pages,
            edits: const DocumentEdits(),
-           view: PreviewView.text,
+           view: initialView,
            currentPage: 0,
            colorMode: ScanColorMode.color,
            fileStem: defaultStem,

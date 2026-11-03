@@ -22,6 +22,7 @@ import '../recognition/data/platform_text_recognizer.dart';
 import '../recognition/data/recognition_repo.dart';
 import '../recognition/data/text_recognizer.dart';
 import '../review/manager/review_cubit.dart';
+import '../review/presentation/filters_screen.dart';
 import '../review/presentation/review_screen.dart';
 import 'doc_scan_config.dart';
 import 'doc_scan_event.dart';
@@ -103,7 +104,7 @@ class ScanFlowDeps {
   final PdfBuilder builder;
 }
 
-enum _Step { starting, camera, review, build, preview, failed }
+enum _Step { starting, camera, filters, review, build, preview, failed }
 
 /// Hosts the steps capture → review → build → preview and owns the session.
 class DocScanFlow extends StatefulWidget {
@@ -132,6 +133,13 @@ class _DocScanFlowState extends State<DocScanFlow> {
   /// review can report the added pages.
   bool _fromReview = false;
   int _pagesBeforeVisit = 0;
+
+  /// The page «توضيح الصفحات» opens on.
+  int _filterIndex = 0;
+
+  /// «إرفاق كملف PDF» from review: build from the photos without waiting for
+  /// text, and open the preview on the photos.
+  bool _imagesOnly = false;
 
   /// The camera of the current visit; its capture cubit disposes it.
   CameraSource? _camera;
@@ -172,7 +180,7 @@ class _DocScanFlowState extends State<DocScanFlow> {
       '${widget.strings.defaultFileStem}-${widget.config.fileNumber.toString().padLeft(2, '0')}';
 
   void _openCamera({String? replacing}) => setState(() {
-    _fromReview = _step == _Step.review;
+    _fromReview = _step == _Step.review || _step == _Step.filters;
     _pagesBeforeVisit = _sessions.session.pages.length;
     _replacing = replacing;
     _camera = widget.deps.newCamera();
@@ -183,6 +191,19 @@ class _DocScanFlowState extends State<DocScanFlow> {
   void _openReview() => setState(() {
     _replacing = null;
     _step = _Step.review;
+  });
+
+  /// «توضيح الصفحات» on [index], or on the last page.
+  void _openFilters([int? index]) => setState(() {
+    final int n = _sessions.session.pages.length;
+    _filterIndex = (index ?? n - 1).clamp(0, n == 0 ? 0 : n - 1);
+    _replacing = null;
+    _step = _Step.filters;
+  });
+
+  void _openBuild({required bool imagesOnly}) => setState(() {
+    _imagesOnly = imagesOnly;
+    _step = _Step.build;
   });
 
   /// Cancel or drag-down on the camera never discards captured pages (owner,
@@ -243,7 +264,7 @@ class _DocScanFlowState extends State<DocScanFlow> {
 
   ScanStep get _scanStep => switch (_step) {
     _Step.starting || _Step.camera || _Step.failed => ScanStep.capture,
-    _Step.review => ScanStep.review,
+    _Step.filters || _Step.review => ScanStep.review,
     _Step.build => ScanStep.build,
     _Step.preview => ScanStep.preview,
   };
@@ -303,11 +324,32 @@ class _DocScanFlowState extends State<DocScanFlow> {
             strings: s,
             preview: camera.preview,
             onCancel: _cameraCancelled,
+            // The camera always hands over to «توضيح الصفحات» (design).
             onReview: () {
               final bool added = _fromReview && _sessions.session.pages.length > _pagesBeforeVisit;
-              _openReview();
+              final String? replaced = _replacing;
+              final int index = replaced == null
+                  ? _sessions.session.pages.length - 1
+                  : _sessions.session.pages.indexWhere((CapturedPage p) => p.id == replaced);
+              _openFilters(index);
               if (added) _emit(DocScanEvent.pageAdded(pageCount: _sessions.session.pages.length));
             },
+          ),
+        );
+      case _Step.filters:
+        return BlocProvider<ReviewCubit>(
+          create: (BuildContext _) => ReviewCubit(
+            sessions: _sessions,
+            preparer: widget.deps.preparer,
+            recognition: _recognition,
+            onEvent: _emit,
+            announce: false,
+          ),
+          child: FiltersScreen(
+            strings: s,
+            initialIndex: _filterIndex,
+            onBack: _openCamera,
+            onNext: _openReview,
           ),
         );
       case _Step.review:
@@ -320,10 +362,13 @@ class _DocScanFlowState extends State<DocScanFlow> {
           ),
           child: ReviewScreen(
             strings: s,
+            onBack: _openFilters,
             onCancel: () => _cancel(ScanStep.review),
             onAddPage: _openCamera,
             onRetakeLast: (String id) => _openCamera(replacing: id),
-            onBuild: () => setState(() => _step = _Step.build),
+            onOpenFilters: _openFilters,
+            onBuild: () => _openBuild(imagesOnly: false),
+            onAttachImages: () => _openBuild(imagesOnly: true),
             onEmpty: _openCamera,
           ),
         );
@@ -336,6 +381,7 @@ class _DocScanFlowState extends State<DocScanFlow> {
             look: _look(t),
             maxFileBytes: widget.config.maxFileBytes,
             onEvent: _emit,
+            waitForText: !_imagesOnly,
           )..start(),
           child: BlocListener<BuildCubit, BuildState>(
             listenWhen: (BuildState a, BuildState b) => b.output != null && a.output == null,
@@ -356,6 +402,7 @@ class _DocScanFlowState extends State<DocScanFlow> {
           maxFileBytes: widget.config.maxFileBytes,
           defaultStem: _defaultStem,
           onEvent: _emit,
+          initialView: _imagesOnly ? PreviewView.photo : PreviewView.text,
         );
         return BlocProvider<PreviewCubit>.value(
           value: cubit,

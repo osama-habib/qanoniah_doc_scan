@@ -432,6 +432,12 @@ description: "Task list for Document Scan (001)"
 - **Scan in the document assistant:** shown there too, through the shared tiles (owner, 2026-11-03).
 - **Not done yet:** device spikes T007 to T009, T029 (Ahmed), T043, T048, T061, T070, T077, T083, T086, T089, T092, T099, OCR gate T103 to T106 (needs the owner's page set), T108, T110 to T112, T114 to T116. Android build not verified locally: this machine has only JDK 8, 11 and 25, and Gradle 8.14 needs 17 or 21.
 
+### Design sync (2026-11-03, design version 1793709601)
+
+- The camera now hands over to «توضيح الصفحات» (full-screen, dark): the page with previous/next, a strip of six combinable filters previewed on the page, «إعادة الضبط», and «تطبيق على كل الصفحات» on by default. «التالي» goes to review; back returns to the camera to add pages. Replaces the filters bottom sheet.
+- Review: back returns to «توضيح الصفحات»; a dashed «إضافة صفحة» tile ends the grid; «إنشاء مستند قابل للتعديل» plus a second «إرفاق كملف PDF» that builds the photo PDF without waiting for text and opens the preview on the photos. Review keeps «إلغاء» because the camera's cancel no longer discards.
+- The design has no before/after compare control on this screen (its `scanCmp` state is not bound to any control), so none was added.
+
 ## Dependencies & Execution Order
 
 ### Phase dependencies

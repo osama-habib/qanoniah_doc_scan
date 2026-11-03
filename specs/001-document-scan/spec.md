@@ -530,3 +530,8 @@ answered (FR-075).
 8. Icons: confirm iconsax matches for auto/manual capture, eye (redact), drag handle, corner handles, filters, text/photo view toggle, and the PDF file chip; name any that need untitled-ui or qn.
 9. Document search (deferred): the design has the bar but no control that opens it. Where should it open from, if it is scheduled later?
 10. Text-form page layout: font size, margins, and how headings and paragraphs render on a text-form PDF page.
+
+
+### Design sync (2026-11-03)
+
+Flow per the design: camera → «توضيح الصفحات» (filters, step of its own) → «مراجعة الصفحات» → «إنشاء مستند قابل للتعديل» (build with text) or «إرفاق كملف PDF» (photos as one PDF, straight to the preview on the photo view). See tasks.md "Design sync".

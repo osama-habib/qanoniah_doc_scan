@@ -1,11 +1,13 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:ui' show PathMetric;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../core/doc_scan_event.dart';
+import '../../core/doc_scan_icons.dart';
 import '../../core/doc_scan_strings.dart';
 import '../../core/doc_scan_theme.dart';
 import '../../core/presentation/scan_widgets.dart';
@@ -13,25 +15,42 @@ import '../../core/session/scan_session.dart';
 import '../manager/review_cubit.dart';
 import 'corner_adjust_screen.dart';
 import 'delete_page_dialog.dart';
-import 'filters_sheet.dart';
 
-/// The review grid (story 3, with 11 to 13 from the tile menu).
+/// The review grid (story 3, with 11 and 12 from the tile menu). Back returns to
+/// «توضيح الصفحات», where story 13's filters live (design `scan-review`).
 class ReviewScreen extends StatelessWidget {
   const ReviewScreen({
     super.key,
     required this.strings,
+    required this.onBack,
     required this.onCancel,
     required this.onAddPage,
     required this.onRetakeLast,
+    required this.onOpenFilters,
     required this.onBuild,
+    required this.onAttachImages,
     required this.onEmpty,
   });
 
   final DocScanStrings strings;
+
+  /// Back to «توضيح الصفحات».
+  final VoidCallback onBack;
+
+  /// Discards the scan. The camera's cancel keeps pages (owner, 2026-11-03), so
+  /// review keeps a way out.
   final VoidCallback onCancel;
   final VoidCallback onAddPage;
   final void Function(String pageId) onRetakeLast;
+
+  /// «توضيح الصفحات» on one page, from its tile menu.
+  final void Function(int index) onOpenFilters;
+
+  /// «إنشاء مستند قابل للتعديل»: build with recognized text.
   final VoidCallback onBuild;
+
+  /// «إرفاق كملف PDF»: the photos as one PDF, straight to the preview.
+  final VoidCallback onAttachImages;
 
   /// The last page was deleted: back to the camera.
   final VoidCallback onEmpty;
@@ -50,22 +69,30 @@ class ReviewScreen extends StatelessWidget {
               children: <Widget>[
                 ScanHeader(
                   title: s.reviewPages,
-                  leading: ScanQuietButton(label: s.cancel, onPressed: onCancel),
-                  trailing: ScanIconButton(
-                    icon: t.icons.filters,
-                    label: s.filtersTitle,
+                  leading: ScanIconButton(
+                    icon: t.icons.back,
+                    label: s.back,
+                    mirrorInRtl: true,
                     color: t.onSurface,
-                    onPressed: st.pages.isEmpty || st.working
-                        ? null
-                        : () => showFiltersSheet(context, cubit: cubit, strings: s, pageId: null),
+                    background: t.surfaceSecondary,
+                    onPressed: onBack,
                   ),
+                  trailing: ScanQuietButton(label: s.cancel, onPressed: onCancel),
                 ),
                 Padding(
                   padding: EdgeInsets.symmetric(horizontal: t.spaceLg, vertical: t.spaceXs),
                   child: Text(s.reorderHint, style: t.captionStyle.copyWith(color: t.onSurfaceMuted), textAlign: TextAlign.center),
                 ),
                 if (st.working) LinearProgressIndicator(color: t.primary, backgroundColor: t.surfaceSecondary),
-                Expanded(child: _Grid(pages: st.pages, strings: s, onEmpty: onEmpty)),
+                Expanded(
+                  child: _Grid(
+                    pages: st.pages,
+                    strings: s,
+                    onEmpty: onEmpty,
+                    onAddPage: onAddPage,
+                    onOpenFilters: onOpenFilters,
+                  ),
+                ),
                 if (st.canUndo)
                   _UndoBar(label: s.undoMove, onUndo: cubit.undoMove),
                 if (st.storageFull)
@@ -77,24 +104,25 @@ class ReviewScreen extends StatelessWidget {
                   padding: EdgeInsets.all(t.spaceLg),
                   child: Column(
                     children: <Widget>[
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: <Widget>[
-                          Flexible(child: ScanQuietButton(label: s.addPage, icon: t.icons.addPage, onPressed: onAddPage)),
-                          if (st.pages.isNotEmpty)
-                            Flexible(
-                              child: ScanQuietButton(
-                                label: s.retakeLast,
-                                icon: t.icons.retake,
-                                onPressed: () => onRetakeLast(st.pages.last.id),
-                              ),
-                            ),
-                        ],
-                      ),
-                      SizedBox(height: t.spaceSm),
+                      if (st.pages.isNotEmpty)
+                        Align(
+                          alignment: AlignmentDirectional.centerStart,
+                          child: ScanQuietButton(
+                            label: s.retakeLast,
+                            icon: t.icons.retake,
+                            onPressed: () => onRetakeLast(st.pages.last.id),
+                          ),
+                        ),
+                      Text(s.attachNote, style: t.captionStyle.copyWith(color: t.onSurfaceMuted)),
+                      SizedBox(height: t.spaceMd),
                       ScanPrimaryButton(
                         label: s.buildDocument,
                         onPressed: st.canBuild && !st.working ? onBuild : null,
+                      ),
+                      SizedBox(height: t.spaceSm),
+                      ScanSecondaryButton(
+                        label: s.attach,
+                        onPressed: st.canBuild && !st.working ? onAttachImages : null,
                       ),
                     ],
                   ),
@@ -109,11 +137,19 @@ class ReviewScreen extends StatelessWidget {
 }
 
 class _Grid extends StatelessWidget {
-  const _Grid({required this.pages, required this.strings, required this.onEmpty});
+  const _Grid({
+    required this.pages,
+    required this.strings,
+    required this.onEmpty,
+    required this.onAddPage,
+    required this.onOpenFilters,
+  });
 
   final List<CapturedPage> pages;
   final DocScanStrings strings;
   final VoidCallback onEmpty;
+  final VoidCallback onAddPage;
+  final void Function(int index) onOpenFilters;
 
   @override
   Widget build(BuildContext context) {
@@ -129,14 +165,18 @@ class _Grid extends StatelessWidget {
             crossAxisSpacing: t.spaceMd,
             childAspectRatio: 0.7,
           ),
-          itemCount: pages.length,
-          itemBuilder: (BuildContext context, int i) => _Tile(
+          // The last cell is the dashed «إضافة صفحة» tile (design).
+          itemCount: pages.length + 1,
+          itemBuilder: (BuildContext context, int i) => i == pages.length
+              ? _AddTile(label: strings.addPage, onTap: onAddPage)
+              : _Tile(
             key: ValueKey<String>(pages[i].id),
             page: pages[i],
             index: i,
             count: pages.length,
             strings: strings,
             onEmpty: onEmpty,
+            onOpenFilters: onOpenFilters,
           ),
         );
       },
@@ -152,12 +192,14 @@ class _Tile extends StatelessWidget {
     required this.count,
     required this.strings,
     required this.onEmpty,
+    required this.onOpenFilters,
   });
 
   final CapturedPage page;
   final int index;
   final int count;
   final DocScanStrings strings;
+  final void Function(int index) onOpenFilters;
   final VoidCallback onEmpty;
 
   @override
@@ -277,7 +319,7 @@ class _Tile extends StatelessWidget {
         );
         if (q != null) unawaited(cubit.adjustCorners(page.id, q));
       case 'filters':
-        if (context.mounted) await showFiltersSheet(context, cubit: cubit, strings: strings, pageId: page.id);
+        onOpenFilters(index);
       case 'earlier':
         cubit.move(index, index - 1, via: MoveVia.action);
       case 'later':
@@ -310,4 +352,65 @@ class _UndoBar extends StatelessWidget {
       ),
     );
   }
+}
+
+/// The dashed «إضافة صفحة» cell at the end of the grid.
+class _AddTile extends StatelessWidget {
+  const _AddTile({required this.label, required this.onTap});
+
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final DocScanTheme t = DocScanTheme.of(context);
+    return Semantics(
+      button: true,
+      label: label,
+      excludeSemantics: true,
+      child: GestureDetector(
+        onTap: onTap,
+        child: CustomPaint(
+          painter: _DashedBorder(color: t.border, radius: t.radiusMd, width: t.frameStrokeWidth / 2),
+          child: Container(
+            decoration: BoxDecoration(color: t.surfaceSecondary, borderRadius: BorderRadius.circular(t.radiusMd)),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: <Widget>[
+                DocScanIcon(t.icons.addPage, size: t.iconSize, color: t.onSurfaceMuted),
+                SizedBox(height: t.spaceXs),
+                Text(label, style: t.captionStyle.copyWith(color: t.onSurfaceMuted), textAlign: TextAlign.center),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DashedBorder extends CustomPainter {
+  _DashedBorder({required this.color, required this.radius, required this.width});
+
+  final Color color;
+  final double radius;
+  final double width;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final Paint p = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = width;
+    final Path path = Path()..addRRect(RRect.fromRectAndRadius(Offset.zero & size, Radius.circular(radius)));
+    final double dash = width * 6;
+    for (final PathMetric m in path.computeMetrics()) {
+      for (double d = 0; d < m.length; d += dash * 2) {
+        canvas.drawPath(m.extractPath(d, math.min(d + dash, m.length)), p);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_DashedBorder old) => old.color != color || old.radius != radius || old.width != width;
 }

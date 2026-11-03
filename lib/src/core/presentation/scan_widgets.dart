@@ -46,6 +46,47 @@ class ScanPrimaryButton extends StatelessWidget {
   }
 }
 
+/// The outlined secondary action, full width (design: «إرفاق كملف PDF» on review).
+class ScanSecondaryButton extends StatelessWidget {
+  const ScanSecondaryButton({super.key, required this.label, required this.onPressed});
+
+  final String label;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final DocScanTheme t = DocScanTheme.of(context);
+    final bool enabled = onPressed != null;
+    return Semantics(
+      button: true,
+      enabled: enabled,
+      label: label,
+      excludeSemantics: true,
+      child: Material(
+        color: t.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(t.radiusMd),
+          side: BorderSide(color: t.border),
+        ),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(t.radiusMd),
+          onTap: onPressed,
+          child: Padding(
+            padding: EdgeInsets.symmetric(vertical: t.spaceMd, horizontal: t.spaceLg),
+            child: Center(
+              child: Text(
+                label,
+                style: t.buttonStyle.copyWith(color: enabled ? t.onSurface : t.onSurfaceMuted),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// A quiet text action with an optional leading icon.
 class ScanQuietButton extends StatelessWidget {
   const ScanQuietButton({super.key, required this.label, required this.onPressed, this.icon, this.color});

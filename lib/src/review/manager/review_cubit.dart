@@ -41,6 +41,9 @@ class ReviewCubit extends Cubit<ReviewState> {
     required PagePreparer preparer,
     required RecognitionRepo recognition,
     required void Function(DocScanEvent) onEvent,
+
+    /// False on «توضيح الصفحات», which shares this cubit but is not review.
+    bool announce = true,
   }) : _sessions = sessions,
        _preparer = preparer,
        _recognition = recognition,
@@ -49,7 +52,7 @@ class ReviewCubit extends Cubit<ReviewState> {
     _sub = _sessions.changes.listen(
       (ScanSession s) => emit(state.copyWith(pages: s.pages, lastMove: s.lastMove)),
     );
-    _onEvent(DocScanEvent.reviewOpened(pageCount: state.pages.length));
+    if (announce) _onEvent(DocScanEvent.reviewOpened(pageCount: state.pages.length));
   }
 
   final ScanSessionRepo _sessions;

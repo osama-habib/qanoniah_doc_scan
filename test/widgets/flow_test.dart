@@ -119,11 +119,17 @@ void main() {
     await t.tap(find.bySemanticsLabel('التقاط'));
     await settle(t, find.bySemanticsLabel('مراجعة الصفحات'));
     await t.tap(find.bySemanticsLabel('مراجعة الصفحات').last);
+    // The camera hands over to «توضيح الصفحات»; «التالي» goes to review.
+    await settle(t, find.text('توضيح الصفحات'));
+    expect(find.text('صفحة 1 / 1'), findsOneWidget);
+    await t.tap(find.text('التالي'));
     await settle(t, find.bySemanticsLabel('إنشاء مستند قابل للتعديل'));
+    expect(find.bySemanticsLabel('إرفاق كملف PDF'), findsOneWidget);
     await t.tap(find.bySemanticsLabel('إنشاء مستند قابل للتعديل'));
-    await settle(t, find.bySemanticsLabel('إرفاق كملف PDF'), tries: 200);
+    await settle(t, find.text('معاينة ملف PDF'), tries: 200);
     expect(find.text('حكم'), findsOneWidget);
-    await t.tap(find.bySemanticsLabel('إرفاق كملف PDF'));
+    await t.pump(const Duration(milliseconds: 300));
+    await t.tap(find.text('إرفاق كملف PDF').last);
     DocScanResult? r;
     for (int i = 0; i < 100 && r == null; i++) {
       await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
@@ -178,5 +184,22 @@ void main() {
     await settle(t, find.text('scan'));
     expect(await t.runAsync<DocScanResult?>(() => result), isNull);
     expect(sessionDirs(), isEmpty);
+  });
+
+  testWidgets('«إرفاق كملف PDF» on review goes straight to the photo preview', (WidgetTester t) async {
+    await t.pumpWidget(host((Future<DocScanResult?> _) {}));
+    await t.tap(find.text('scan'));
+    await settle(t, find.text('يدوي'));
+    await t.tap(find.text('يدوي'));
+    await t.pump();
+    await t.tap(find.bySemanticsLabel('التقاط'));
+    await settle(t, find.bySemanticsLabel('مراجعة الصفحات'));
+    await t.tap(find.bySemanticsLabel('مراجعة الصفحات').last);
+    await settle(t, find.text('التالي'));
+    await t.tap(find.text('التالي'));
+    await settle(t, find.bySemanticsLabel('إرفاق كملف PDF'));
+    await t.tap(find.bySemanticsLabel('إرفاق كملف PDF'));
+    await settle(t, find.text('لون المسح'), tries: 200);
+    expect(find.text('معاينة ملف PDF'), findsOneWidget);
   });
 }
