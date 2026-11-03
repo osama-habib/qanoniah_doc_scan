@@ -1,26 +1,20 @@
 <!--
 SYNC IMPACT REPORT
 ==================
-Version change: 1.4.0 → 1.5.0
+Version change: 1.5.0 → 1.6.0
 Modified principles: none
-Modified sections:
-  - Development Workflow: "Feature branches MUST branch from main" gains a dependent-branch
-    exception. A feature that depends on an unmerged feature branch (edits the same files, or
-    its spec relies on that feature's behavior) MAY branch from that parent branch, provided it
-    names the parent in plan.md, does not open its PR until the parent has merged to main, and
-    is rebased onto main before the PR is opened. PRs still target main. MINOR bump: materially
-    expanded guidance, nothing removed. Owner decision 2026-10-11 (spec 029 branched from
-    unmerged 028).
-Added sections: none
+Added sections:
+  - Package Addendum P8 (Flow-scoped state, no locator): cubits in qanoniah_doc_scan are
+    constructor-injected in the DocScan.start composition root and provided to the flow
+    subtree; the package has no service locator. Replaces Principle IV's get_it registration
+    for this package only. MINOR bump: new package rule. Owner decision 2026-11-02
+    (/speckit-analyze finding D1, spec 001-document-scan).
 Removed sections: none
 Templates requiring updates:
   - .specify/templates/plan-template.md ✅ reviewed (Constitution Check reads this file; no change)
   - .specify/templates/spec-template.md ✅ reviewed (no change)
   - .specify/templates/tasks-template.md ✅ reviewed (no change)
-  - .specify/templates/commands/*.md ✅ none present
-  - CLAUDE.md ✅ reviewed (no branch-base rule stated; no change)
-  - specs/029-inline-source-references/plan.md ✅ branch-base row changed from justified
-    violation to PASS, parent branch named
+  - specs/001-document-scan/plan.md ✅ Principle IV row now PASS via P8; Complexity Tracking row removed
 Deferred TODOs:
   - TODO(RATIFICATION_DATE): Confirm original project adoption date
 -->
@@ -145,7 +139,7 @@ All specification, planning, and task generation done via Spec Kit MUST comply w
 principles. `CLAUDE.md` serves as runtime development guidance and MUST stay aligned with
 this constitution.
 
-**Version**: 1.5.0 | **Ratified**: TODO(RATIFICATION_DATE): confirm original adoption date | **Last Amended**: 2026-10-11
+**Version**: 1.6.0 | **Ratified**: TODO(RATIFICATION_DATE): confirm original adoption date | **Last Amended**: 2026-11-02
 ## Package Addendum: qanoniah_doc_scan
 
 This repo is a standalone Flutter plugin consumed by `qanoniah-mobile` via a pinned git tag
@@ -187,3 +181,9 @@ Text recognition runs only on the device, free, with no backend call. Image prep
 post-processing are package code; the recognition engine (Vision / Tesseract) sits behind one
 port and its model file is an asset, so a model update needs no code change. A fixed evaluation
 set gates every engine or model change. User images and text are never used for training.
+
+### P8. Flow-scoped state, no locator
+Cubits are created by constructor injection in the `DocScan.start` composition root and provided
+to the flow subtree; none outlives the flow. The package has no service locator. This replaces
+Principle IV's get_it registration for this package only; every other part of Principle IV
+(flutter_bloc only, no other state solution) applies unchanged.

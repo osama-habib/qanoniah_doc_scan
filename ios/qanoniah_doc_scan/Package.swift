@@ -6,7 +6,7 @@ import PackageDescription
 let package = Package(
     name: "qanoniah_doc_scan",
     platforms: [
-        .iOS("13.0")
+        .iOS("15.0")
     ],
     products: [
         .library(name: "qanoniah-doc-scan", targets: ["qanoniah_doc_scan"])

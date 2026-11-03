@@ -1,0 +1,160 @@
+import 'dart:io';
+import 'dart:typed_data';
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:qanoniah_doc_scan/src/capture/data/camera_source.dart';
+import 'package:qanoniah_doc_scan/src/capture/data/edge_detector.dart';
+import 'package:qanoniah_doc_scan/src/capture/manager/capture_cubit.dart';
+import 'package:qanoniah_doc_scan/src/core/doc_scan_event.dart';
+import 'package:qanoniah_doc_scan/src/core/failures.dart';
+import 'package:qanoniah_doc_scan/src/core/session/scan_session.dart';
+import 'package:qanoniah_doc_scan/src/core/session/scan_session_repo.dart';
+import 'package:qanoniah_doc_scan/src/recognition/data/recognition_repo.dart';
+
+import '../fakes/fake_camera_source.dart';
+import '../fakes/fake_edge_detector.dart';
+import '../fakes/fake_text_recognizer.dart';
+import '../helpers/test_host.dart';
+
+const Quad page = Quad(
+  topLeft: Offset(0.1, 0.1),
+  topRight: Offset(0.9, 0.1),
+  bottomRight: Offset(0.9, 0.9),
+  bottomLeft: Offset(0.1, 0.9),
+);
+
+const FrameAnalysis good = FrameAnalysis(quad: page, sharpness: 200, luminance: 140);
+
+void main() {
+  late Directory tmp;
+  late ScanSessionRepo sessions;
+  late FakeCameraSource camera;
+  late FakeEdgeDetector edges;
+  late FakePermissionRepo permissions;
+  late RecognitionRepo recognition;
+  late List<DocScanEvent> events;
+  late DateTime clock;
+
+  CaptureCubit cubit({String? replacing}) => CaptureCubit(
+    camera: camera,
+    edges: edges,
+    permissions: permissions,
+    preparer: FakePagePreparer(),
+    sessions: sessions,
+    recognition: recognition,
+    onEvent: events.add,
+    replacePageId: replacing,
+    now: () => clock,
+  );
+
+  Future<void> feed(int n, {Duration step = const Duration(milliseconds: 200)}) async {
+    for (int i = 0; i < n; i++) {
+      camera.emit(CameraFrame(luminance: Uint8List(1), width: 1, height: 1));
+      await pumpEventQueue();
+      clock = clock.add(step);
+    }
+  }
+
+  setUp(() async {
+    tmp = await Directory.systemTemp.createTemp('cap');
+    sessions = ScanSessionRepo(tempRoot: () async => tmp);
+    await sessions.start(maxPages: 2);
+    camera = FakeCameraSource(outDir: tmp);
+    edges = FakeEdgeDetector(good);
+    permissions = FakePermissionRepo();
+    recognition = RecognitionRepo(recognizer: FakeTextRecognizer(), sessions: sessions);
+    events = <DocScanEvent>[];
+    clock = DateTime(2026);
+  });
+
+  tearDown(() async {
+    recognition.dispose();
+    await tmp.delete(recursive: true);
+  });
+
+  test('steady, sharp, bright frames capture exactly once', () async {
+    final CaptureCubit c = cubit();
+    await c.start();
+    await feed(8);
+    if (c.state.pageCount == 0) {
+      await c.stream.firstWhere((CaptureState s) => s.pageCount > 0).timeout(const Duration(seconds: 5));
+    }
+    await feed(4);
+    expect(camera.pictures, 1);
+    expect(c.state.pageCount, 1);
+    expect(events.where((DocScanEvent e) => e.name == 'scan_page_captured').length, 1);
+    await c.close();
+  });
+
+  test('dark or blurred frames never auto-capture and show a hint', () async {
+    edges.next = const FrameAnalysis(quad: page, sharpness: 200, luminance: 10);
+    final CaptureCubit c = cubit();
+    await c.start();
+    await feed(8);
+    expect(c.state.hint, CaptureHint.lowLight);
+    edges.next = const FrameAnalysis(quad: page, sharpness: 5, luminance: 140);
+    await feed(8);
+    expect(c.state.hint, CaptureHint.holdSteady);
+    expect(camera.pictures, 0);
+    await c.close();
+  });
+
+  test('manual capture works with no corners and uses the full frame', () async {
+    edges.next = const FrameAnalysis(quad: null, sharpness: 0, luminance: 0);
+    final CaptureCubit c = cubit();
+    await c.start();
+    c.setMode(CaptureMode.manual);
+    await c.capture();
+    expect(sessions.session.pages.single.corners, Quad.fullFrame);
+    await c.close();
+  });
+
+  test('the page limit stops capture', () async {
+    final CaptureCubit c = cubit();
+    await c.start();
+    c.setMode(CaptureMode.manual);
+    await c.capture();
+    await c.capture();
+    await c.capture();
+    expect(sessions.session.pages.length, 2);
+    expect(c.state.limitReached, isTrue);
+    expect(events.map((DocScanEvent e) => e.name), contains('scan_page_limit_reached'));
+    await c.close();
+  });
+
+  test('denied and permanently denied permissions', () async {
+    permissions.result = const CameraFailure.permissionDenied();
+    final CaptureCubit a = cubit();
+    await a.start();
+    expect(a.state.phase, CapturePhase.denied);
+    permissions.result = const CameraFailure.permanentlyDenied();
+    final CaptureCubit b = cubit();
+    await b.start();
+    expect(b.state.phase, CapturePhase.permanentlyDenied);
+    expect(events.map((DocScanEvent e) => e.name), containsAll(<String>[
+      'scan_permission_denied',
+      'scan_permission_permanently_denied',
+    ]));
+    await a.close();
+    await b.close();
+  });
+
+  test('retake replaces the page in place and flags replaced', () async {
+    final CaptureCubit first = cubit();
+    await first.start();
+    first.setMode(CaptureMode.manual);
+    await first.capture();
+    await first.close();
+    final String id = sessions.session.pages.single.id;
+
+    camera = FakeCameraSource(outDir: tmp);
+    final CaptureCubit retake = cubit(replacing: id);
+    await retake.start();
+    await retake.capture();
+    expect(sessions.session.pages.length, 1);
+    expect(sessions.session.pages.single.id, id);
+    expect(retake.state.replaced, isTrue);
+    await retake.close();
+  });
+
+}

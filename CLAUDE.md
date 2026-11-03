@@ -29,3 +29,7 @@ flutter analyze
 flutter test
 cd example && flutter run
 ```
+
+<!-- SPECKIT START -->
+Active feature plan: `specs/001-document-scan/plan.md` (research, data model, contracts, quickstart alongside).
+<!-- SPECKIT END -->
