@@ -1,3 +1,32 @@
+## 0.6.0
+
+Scanner-grade capture and layout-aware OCR.
+
+* Page prep runs natively: Core Image on iOS (about 3 to 5 times faster than the
+  Dart pipeline on the same photo), Bitmap and Matrix on Android. The Dart
+  pipeline stays as the fallback.
+* Straightening keeps the sheet's real proportions, recovered from the perspective
+  of its corners (Zhang and He): an A4 page photographed at an angle comes out at
+  0.702 against 0.707. Shadows are flattened. A thin margin inside the edge is
+  cropped so no desk shows.
+* iOS finds the page with Vision's document segmentation, live and on the photo.
+  On a test page the corners were off by 0.26% of the width. Sharpness,
+  brightness and the signature come from the same native call.
+* The live frame eases between detections, holds through brief misses and
+  pulses. The flash, the corner step's fade, the shot flying into the page stack
+  and the sheet sliding up follow the design. The camera is no longer reopened
+  around the corner step.
+* OCR keeps the page layout through a new `LayoutAnalyzer`:
+  * tables with wrapped cells and one alignment per column;
+  * paragraphs that keep their printed lines;
+  * alignment measured in each paragraph's own direction;
+  * headings, indents and spacing;
+  * text columns read column by column.
+* The preview and the text-form PDF on iOS and Android draw that layout: ruled
+  tables, aligned and justified blocks, larger headings. Latin words keep their
+  order inside Arabic lines.
+* Fixed: Dart black-and-white pages came out dark (the one-channel JPEG encoding).
+
 ## 0.5.0
 
 Matches the Claude Design «Full App - Document Scan» screen by screen.
