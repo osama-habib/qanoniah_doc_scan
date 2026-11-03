@@ -163,8 +163,11 @@ class CameraPluginSource implements CameraSource {
     final DateTime now = DateTime.now();
     if (now.difference(_lastFrame) < minFrameGap || !_frames.hasListener) return;
     _lastFrame = now;
-    _frames.add(_downscale(image.planes.first, image.width, image.height,
-        _description?.sensorOrientation ?? 0));
+    // The UI is locked to portrait. iOS already delivers upright frames once the
+    // capture orientation is locked; Android delivers them in sensor orientation.
+    // Rotating only a landscape frame handles both.
+    final int rotation = image.width > image.height ? (_description?.sensorOrientation ?? 0) : 0;
+    _frames.add(_downscale(image.planes.first, image.width, image.height, rotation));
   }
 
   /// Subsamples the luminance plane and rotates it upright.

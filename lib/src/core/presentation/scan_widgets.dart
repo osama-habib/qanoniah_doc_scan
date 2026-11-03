@@ -116,7 +116,7 @@ class ScanQuietButton extends StatelessWidget {
                 DocScanIcon(icon!, size: t.iconSize, color: c),
                 SizedBox(width: t.spaceXs),
               ],
-              Flexible(child: Text(label, style: t.buttonStyle.copyWith(color: c))),
+              Flexible(child: Text(label, style: t.buttonStyle.copyWith(color: c), maxLines: 1, softWrap: false)),
             ],
           ),
         ),
@@ -190,7 +190,9 @@ class ScanSheetHandle extends StatelessWidget {
   }
 }
 
-/// A light screen header: title in the middle, actions at the edges.
+/// A light screen header: title in the middle, actions at the edges. The actions
+/// keep their natural width on one line (never wrapped), and the title stays
+/// centered on the screen whatever their widths.
 class ScanHeader extends StatelessWidget {
   const ScanHeader({super.key, required this.title, this.leading, this.trailing, this.color});
 
@@ -202,12 +204,19 @@ class ScanHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final DocScanTheme t = DocScanTheme.of(context);
+    Widget side(Widget? w, AlignmentGeometry a) => Expanded(
+      child: Align(
+        alignment: a,
+        child: w == null ? null : FittedBox(fit: BoxFit.scaleDown, alignment: a, child: w),
+      ),
+    );
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: t.spaceSm, vertical: t.spaceXs),
       child: Row(
         children: <Widget>[
-          SizedBox(width: t.thumbnailSize, child: Align(alignment: AlignmentDirectional.centerStart, child: leading)),
-          Expanded(
+          side(leading, AlignmentDirectional.centerStart),
+          Flexible(
+            flex: 2,
             child: Semantics(
               header: true,
               child: Text(
@@ -219,7 +228,7 @@ class ScanHeader extends StatelessWidget {
               ),
             ),
           ),
-          SizedBox(width: t.thumbnailSize, child: Align(alignment: AlignmentDirectional.centerEnd, child: trailing)),
+          side(trailing, AlignmentDirectional.centerEnd),
         ],
       ),
     );

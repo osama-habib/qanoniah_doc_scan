@@ -68,6 +68,7 @@ class CaptureCubit extends Cubit<CaptureState> {
     this.minSharpness = 60,
     this.minLuminance = 60,
     this.rearmDistance = 0.1,
+    this.rearmContentChange = 18,
   }) : _camera = camera,
        _edges = edges,
        _permissions = permissions,
@@ -104,10 +105,17 @@ class CaptureCubit extends Cubit<CaptureState> {
   final double minLuminance;
   final double rearmDistance;
 
+  /// Re-arms auto capture when the frame's content changed this much (mean
+  /// absolute difference of signatures, 0 to 255): a new page laid on the same
+  /// spot as the last one.
+  final double rearmContentChange;
+
   StreamSubscription<CameraFrame>? _frames;
   DateTime? _steadySince;
   Quad? _steadyQuad;
   Quad? _lastCaptured;
+  List<int> _lastSignature = const <int>[];
+  List<int> _capturedSignature = const <int>[];
   bool _armed = true;
 
   /// Checks the permission, then opens the camera.
@@ -162,6 +170,11 @@ class CaptureCubit extends Cubit<CaptureState> {
     } on FileSystemException catch (e) {
       return _storageError(e);
     }
+    // Like a scanner: find the page again on the full-resolution photo; the live
+    // frame's corners are the fallback, the whole photo the last resort.
+    final Quad found = await _edges.detectInPhoto(raw) ?? corners;
+    if (isClosed) return;
+    corners = found;
     final File prepared = _sessions.newFile('jpg');
     final File ocr = _sessions.newFile('png');
     final Either<StorageFailure, Unit> ok = await _preparer.prepare(
@@ -195,6 +208,7 @@ class CaptureCubit extends Cubit<CaptureState> {
 
     final ScanSession s = _sessions.session;
     _lastCaptured = corners;
+    _capturedSignature = _lastSignature;
     _armed = false;
     _resetSteady();
     _onEvent(DocScanEvent.pageCaptured(mode: state.mode, pageCount: s.pages.length));
@@ -218,9 +232,16 @@ class CaptureCubit extends Cubit<CaptureState> {
     final FrameAnalysis a = await _edges.analyze(frame);
     if (isClosed || state.capturing) return;
     final Quad? q = a.quad;
+    _lastSignature = a.signature;
 
-    if (!_armed && (q == null || (_lastCaptured != null && quadDistance(q, _lastCaptured!) > rearmDistance))) {
+    // After a capture, wait for something new: the page left, moved, or was
+    // replaced by another page in the same place.
+    if (!_armed &&
+        (q == null ||
+            (_lastCaptured != null && quadDistance(q, _lastCaptured!) > rearmDistance) ||
+            signatureDistance(a.signature, _capturedSignature) > rearmContentChange)) {
       _armed = true;
+      _resetSteady();
     }
 
     CaptureHint hint = state.pageCount > 0 && state.mode == CaptureMode.auto

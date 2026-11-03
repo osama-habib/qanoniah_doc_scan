@@ -1,8 +1,10 @@
+import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter/painting.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image/image.dart' as img;
 import 'package:qanoniah_doc_scan/src/capture/data/edge_detector.dart';
 import 'package:qanoniah_doc_scan/src/core/session/scan_session.dart';
 
@@ -62,5 +64,30 @@ void main() {
     final (double sharp, double _) = frameStats(pageFrame(w, h, corners), w, h);
     final (double flat, double _) = frameStats(Uint8List(w * h)..fillRange(0, w * h, 120), w, h);
     expect(sharp, greaterThan(flat));
+  });
+
+  test('finds the page in a captured photo', () async {
+    final Directory tmp = await Directory.systemTemp.createTemp('photo');
+    final Uint8List g = pageFrame(w, h, corners);
+    final img.Image photo = img.Image(width: w, height: h);
+    for (int y = 0; y < h; y++) {
+      for (int x = 0; x < w; x++) {
+        final int v = g[y * w + x];
+        photo.setPixelRgb(x, y, v, v, v);
+      }
+    }
+    final File f = File('${tmp.path}/p.jpg')..writeAsBytesSync(img.encodeJpg(photo, quality: 95));
+    final Quad q = (await DartEdgeDetector().detectInPhoto(f))!;
+    expect((q.topLeft.dx * (w - 1) - corners[0].dx).abs(), lessThan(16));
+    expect((q.bottomRight.dy * (h - 1) - corners[2].dy).abs(), lessThan(16));
+    await tmp.delete(recursive: true);
+  });
+
+  test('signatures tell a different page from the same one', () {
+    final Uint8List a = pageFrame(w, h, corners);
+    final List<int> sa = frameSignature(a, w, h);
+    expect(signatureDistance(sa, frameSignature(a, w, h)), 0);
+    final Uint8List b = Uint8List.fromList(a.map((int v) => 255 - v).toList());
+    expect(signatureDistance(sa, frameSignature(b, w, h)), greaterThan(18));
   });
 }

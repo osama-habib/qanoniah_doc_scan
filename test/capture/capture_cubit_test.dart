@@ -157,4 +157,41 @@ void main() {
     await retake.close();
   });
 
+
+  test('a new page in the same place re-arms auto capture (a stack of pages)', () async {
+    final CaptureCubit c = cubit();
+    await c.start();
+    edges.next = FrameAnalysis(quad: page, sharpness: 200, luminance: 140, signature: List<int>.filled(256, 200));
+    await feed(8);
+    if (c.state.pageCount == 0) {
+      await c.stream.firstWhere((CaptureState s) => s.pageCount > 0).timeout(const Duration(seconds: 5));
+    }
+    // Same corners, same content: no second capture.
+    await feed(8);
+    expect(camera.pictures, 1);
+    // Same corners, different content: the next page was laid on top.
+    edges.next = FrameAnalysis(quad: page, sharpness: 200, luminance: 140, signature: List<int>.filled(256, 120));
+    await feed(10);
+    if (camera.pictures < 2) {
+      await c.stream.firstWhere((CaptureState s) => s.pageCount > 1).timeout(const Duration(seconds: 5));
+    }
+    expect(camera.pictures, 2);
+    await c.close();
+  });
+
+  test('the corners found on the photo win over the live frame', () async {
+    const Quad still = Quad(
+      topLeft: Offset(0.2, 0.2),
+      topRight: Offset(0.8, 0.2),
+      bottomRight: Offset(0.8, 0.8),
+      bottomLeft: Offset(0.2, 0.8),
+    );
+    edges.photoQuad = still;
+    final CaptureCubit c = cubit();
+    await c.start();
+    c.setMode(CaptureMode.manual);
+    await c.capture();
+    expect(sessions.session.pages.single.corners, still);
+    await c.close();
+  });
 }

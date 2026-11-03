@@ -1,8 +1,10 @@
+import 'dart:io';
 import 'dart:isolate';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:image/image.dart' as img;
 
 import '../../core/session/scan_session.dart';
 import 'camera_source.dart';
@@ -15,6 +17,7 @@ class FrameAnalysis {
     required this.quad,
     required this.sharpness,
     required this.luminance,
+    this.signature = const <int>[],
   });
 
   /// Null when no page edges were found.
@@ -25,12 +28,55 @@ class FrameAnalysis {
 
   /// Mean luminance, 0 to 255.
   final double luminance;
+
+  /// A 16 x 16 block-average of the frame, to tell a new page from the one
+  /// just captured when it lies in the same place (a stack of pages).
+  final List<int> signature;
+}
+
+/// Mean absolute difference of two signatures, 0 to 255; 0 when either is empty.
+double signatureDistance(List<int> a, List<int> b) {
+  if (a.isEmpty || a.length != b.length) return 0;
+  int sum = 0;
+  for (int i = 0; i < a.length; i++) {
+    sum += (a[i] - b[i]).abs();
+  }
+  return sum / a.length;
+}
+
+/// 16 x 16 block averages of a luminance frame.
+List<int> frameSignature(Uint8List g, int w, int h, {int size = 16}) {
+  final List<int> out = List<int>.filled(size * size, 0);
+  if (w < size || h < size) return out;
+  for (int by = 0; by < size; by++) {
+    final int y0 = by * h ~/ size;
+    final int y1 = (by + 1) * h ~/ size;
+    for (int bx = 0; bx < size; bx++) {
+      final int x0 = bx * w ~/ size;
+      final int x1 = (bx + 1) * w ~/ size;
+      int sum = 0;
+      int n = 0;
+      for (int y = y0; y < y1; y += 2) {
+        for (int x = x0; x < x1; x += 2) {
+          sum += g[y * w + x];
+          n++;
+        }
+      }
+      out[by * size + bx] = n == 0 ? 0 : sum ~/ n;
+    }
+  }
+  return out;
 }
 
 /// Live page-edge detection, behind a port so capture logic is testable without
 /// image processing (constitution P5).
 abstract interface class EdgeDetector {
   Future<FrameAnalysis> analyze(CameraFrame frame);
+
+  /// The page's corners in a captured photo, upright and normalized, or null.
+  /// Run once per capture on the full-resolution still, so the warp uses the
+  /// most precise edges, like a scanner (FR-005).
+  Future<Quad?> detectInPhoto(File photo);
   Future<void> dispose();
 }
 
@@ -70,7 +116,33 @@ class DartEdgeDetector implements EdgeDetector {
   }
 
   @override
+  Future<Quad?> detectInPhoto(File photo) {
+    final String path = photo.path;
+    final double ratio = minAreaRatio;
+    return Isolate.run(() => detectInPhotoFile(path, ratio));
+  }
+
+  @override
   Future<void> dispose() async {}
+}
+
+/// Decodes [path] upright, scales it to a 640 px long edge, and finds the page.
+Quad? detectInPhotoFile(String path, double minAreaRatio) {
+  final img.Image? decoded = img.decodeImage(File(path).readAsBytesSync());
+  if (decoded == null) return null;
+  img.Image photo = img.bakeOrientation(decoded);
+  final int long = math.max(photo.width, photo.height);
+  if (long > 640) {
+    photo = photo.width >= photo.height
+        ? img.copyResize(photo, width: 640, interpolation: img.Interpolation.average)
+        : img.copyResize(photo, height: 640, interpolation: img.Interpolation.average);
+  }
+  final Uint8List gray = Uint8List(photo.width * photo.height);
+  int i = 0;
+  for (final img.Pixel p in photo) {
+    gray[i++] = (0.2126 * p.r + 0.7152 * p.g + 0.0722 * p.b).round().clamp(0, 255);
+  }
+  return analyzeLuminance(gray, photo.width, photo.height, minAreaRatio).quad;
 }
 
 /// [EdgeDetector] on iOS: Apple Vision's rectangle detector finds the page, and the
@@ -101,14 +173,15 @@ class VisionEdgeDetector implements EdgeDetector {
       final Uint8List bytes = frame.luminance;
       final int w = frame.width;
       final int h = frame.height;
-      final Future<(double, double)> stats = Isolate.run(
-        () => frameStats(bytes, w, h),
-      );
+      final Future<(double, double, List<int>)> stats = Isolate.run(() {
+        final (double sharp, double lum) = frameStats(bytes, w, h);
+        return (sharp, lum, frameSignature(bytes, w, h));
+      });
       final List<Object?>? corners = await _channel.invokeListMethod<Object?>(
         'detectRectangle',
         <String, Object>{'bytes': bytes, 'width': w, 'height': h},
       );
-      final (double sharpness, double luminance) = await stats;
+      final (double sharpness, double luminance, List<int> signature) = await stats;
       Quad? quad;
       if (corners != null && corners.length == 8) {
         final List<double> c = corners
@@ -122,6 +195,7 @@ class VisionEdgeDetector implements EdgeDetector {
         quad: quad,
         sharpness: sharpness,
         luminance: luminance,
+        signature: signature,
       );
     } on MissingPluginException {
       _useFallback = true;
@@ -131,6 +205,26 @@ class VisionEdgeDetector implements EdgeDetector {
       return _fallback.analyze(frame);
     } finally {
       _busy = false;
+    }
+  }
+
+  @override
+  Future<Quad?> detectInPhoto(File photo) async {
+    if (_useFallback) return _fallback.detectInPhoto(photo);
+    try {
+      final List<Object?>? corners = await _channel.invokeListMethod<Object?>(
+        'detectRectangleInPhoto',
+        <String, Object>{'path': photo.path},
+      );
+      if (corners == null || corners.length != 8) return _fallback.detectInPhoto(photo);
+      final List<double> c = corners.map((Object? v) => (v as num?)?.toDouble() ?? 0).toList();
+      return orderCorners(<Offset>[
+        for (int i = 0; i < 8; i += 2) Offset(c[i], c[i + 1]),
+      ]);
+    } on MissingPluginException {
+      return _fallback.detectInPhoto(photo);
+    } on PlatformException {
+      return _fallback.detectInPhoto(photo);
     }
   }
 
@@ -297,7 +391,12 @@ FrameAnalysis analyzeLuminance(
       );
     }
   }
-  return FrameAnalysis(quad: quad, sharpness: sharpness, luminance: luminance);
+  return FrameAnalysis(
+    quad: quad,
+    sharpness: sharpness,
+    luminance: luminance,
+    signature: frameSignature(bytes, width, height),
+  );
 }
 
 /// Orders four normalized points as top-left, top-right, bottom-right, bottom-left.

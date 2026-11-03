@@ -1,3 +1,14 @@
+## 0.4.1
+
+* Fixed on iOS: the live page frame was drawn on swapped axes. iOS delivers upright frames
+  once portrait is locked, and they were rotated a second time.
+* Scanner-like straightening: after each capture the page edges are found again on the
+  full-resolution photo (Vision on iOS, Dart elsewhere) and the page is warped to them; the
+  live frame's corners are the fallback.
+* Auto capture re-arms when a new page is laid where the last one was (a stack of pages),
+  not only when the page moves or leaves the frame.
+* Header buttons such as «إلغاء» / Cancel no longer wrap onto several lines.
+
 ## 0.4.0
 
 * Matches the current design: after the camera comes «توضيح الصفحات», a full-screen filter step

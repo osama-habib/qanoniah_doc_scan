@@ -1,5 +1,6 @@
 import CTesseract
 import Flutter
+import ImageIO
 import UIKit
 import Vision
 
@@ -44,6 +45,12 @@ public class QanoniahDocScanPlugin: NSObject, FlutterPlugin {
       else { return result(FlutterMethodNotImplemented) }
       frameQueue.async {
         let corners = Self.detectRectangle(bytes: data.data, width: width, height: height)
+        DispatchQueue.main.async { result(corners) }
+      }
+    case "detectRectangleInPhoto":
+      guard let path = args["path"] as? String else { return result(FlutterMethodNotImplemented) }
+      frameQueue.async {
+        let corners = Self.detectRectangle(inPhotoAt: path)
         DispatchQueue.main.async { result(corners) }
       }
     case "renderText":
@@ -176,6 +183,36 @@ public class QanoniahDocScanPlugin: NSObject, FlutterPlugin {
 
   // MARK: Page edges
 
+  /// The page in a captured photo, upright (EXIF orientation applied), as 8
+  /// normalized numbers, origin top left, or nil.
+  private static func detectRectangle(inPhotoAt path: String) -> [Double]? {
+    let url = URL(fileURLWithPath: path) as CFURL
+    guard let source = CGImageSourceCreateWithURL(url, nil),
+      let image = CGImageSourceCreateImageAtIndex(source, 0, nil)
+    else { return nil }
+    let props = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any]
+    let raw = (props?[kCGImagePropertyOrientation] as? UInt32) ?? 1
+    let orientation = CGImagePropertyOrientation(rawValue: raw) ?? .up
+    return rectangle(in: VNImageRequestHandler(cgImage: image, orientation: orientation, options: [:]))
+  }
+
+  private static func rectangle(in handler: VNImageRequestHandler) -> [Double]? {
+    let request = VNDetectRectanglesRequest()
+    request.maximumObservations = 1
+    request.minimumSize = 0.3
+    request.minimumConfidence = 0.6
+    request.minimumAspectRatio = 0.3
+    request.quadratureTolerance = 25
+    do {
+      try handler.perform([request])
+    } catch {
+      return nil
+    }
+    guard let r = request.results?.first else { return nil }
+    let points = [r.topLeft, r.topRight, r.bottomRight, r.bottomLeft]
+    return points.flatMap { [Double($0.x), Double(1 - $0.y)] }
+  }
+
   /// The largest page-like rectangle, as 8 normalized numbers (x, y per corner,
   /// origin top left), or nil.
   private static func detectRectangle(bytes: Data, width: Int, height: Int) -> [Double]? {
@@ -186,19 +223,6 @@ public class QanoniahDocScanPlugin: NSObject, FlutterPlugin {
         space: CGColorSpaceCreateDeviceGray(), bitmapInfo: CGBitmapInfo(rawValue: 0),
         provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent)
     else { return nil }
-    let request = VNDetectRectanglesRequest()
-    request.maximumObservations = 1
-    request.minimumSize = 0.3
-    request.minimumConfidence = 0.6
-    request.minimumAspectRatio = 0.3
-    request.quadratureTolerance = 25
-    do {
-      try VNImageRequestHandler(cgImage: image, options: [:]).perform([request])
-    } catch {
-      return nil
-    }
-    guard let r = request.results?.first else { return nil }
-    let points = [r.topLeft, r.topRight, r.bottomRight, r.bottomLeft]
-    return points.flatMap { [Double($0.x), Double(1 - $0.y)] }
+    return rectangle(in: VNImageRequestHandler(cgImage: image, options: [:]))
   }
 }
