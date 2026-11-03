@@ -19,6 +19,8 @@ import java.util.concurrent.Executors
 class QanoniahDocScanPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
     private lateinit var channel: MethodChannel
     private lateinit var pdfChannel: MethodChannel
+    private lateinit var prepChannel: MethodChannel
+    private val prepWorker = Executors.newSingleThreadExecutor()
     private lateinit var cacheDir: java.io.File
     private val worker = Executors.newSingleThreadExecutor()
     private val main = Handler(Looper.getMainLooper())
@@ -43,11 +45,31 @@ class QanoniahDocScanPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                 }
             }
         }
+        // Page preparation and live-frame statistics (see PagePrep).
+        prepChannel = MethodChannel(binding.binaryMessenger, "qanoniah_doc_scan/prep")
+        prepChannel.setMethodCallHandler { call, result ->
+            val args = call.arguments as? Map<*, *> ?: return@setMethodCallHandler result.notImplemented()
+            when (call.method) {
+                "preparePage" -> prepWorker.execute {
+                    val out = try {
+                        PagePrep.prepare(args)
+                    } catch (e: Throwable) {
+                        null
+                    }
+                    main.post {
+                        if (out != null) result.success(out) else result.error("prepare_failed", null, null)
+                    }
+                }
+                else -> result.notImplemented()
+            }
+        }
     }
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         channel.setMethodCallHandler(null)
         pdfChannel.setMethodCallHandler(null)
+        prepChannel.setMethodCallHandler(null)
+        prepWorker.shutdown()
         worker.execute {
             engines.values.forEach { it.recycle() }
             engines.clear()
@@ -118,6 +140,8 @@ class QanoniahDocScanPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
             iter.delete()
         }
         api.clear()
+        val width = bitmap.width
+        val height = bitmap.height
         bitmap.recycle()
 
         val blocks = lines.map { mutableListOf<Map<String, Any>>() }.toMutableList()
@@ -129,6 +153,6 @@ class QanoniahDocScanPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
         }
         val out = blocks.filter { it.isNotEmpty() }.toMutableList<List<Map<String, Any>>>()
         if (orphans.isNotEmpty()) out.add(orphans)
-        return mapOf("blocks" to out, "paragraphs" to false)
+        return mapOf("blocks" to out, "paragraphs" to false, "width" to width, "height" to height)
     }
 }

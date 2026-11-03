@@ -9,7 +9,7 @@ import '../../core/session/scan_session.dart';
 /// What an engine returns, before post-processing (research R6).
 @immutable
 class RawRecognition {
-  const RawRecognition({required this.blocks, required this.blocksAreParagraphs});
+  const RawRecognition({required this.blocks, required this.blocksAreParagraphs, this.width = 0, this.height = 0});
 
   /// Lines, or paragraphs when the engine groups them itself. Words are in the
   /// engine's own order, with boxes in image pixels.
@@ -17,6 +17,10 @@ class RawRecognition {
 
   /// True when [blocks] are already paragraphs, so grouping is skipped.
   final bool blocksAreParagraphs;
+
+  /// The recognized image's size in pixels; 0 when the engine did not say.
+  final double width;
+  final double height;
 }
 
 /// The recognition engine, behind the one port the brief allows (FR-051, P5).

@@ -93,6 +93,9 @@ class FakePagePreparer implements PagePreparer {
   int get jpegQuality => 90;
 
   @override
+  bool get native => false;
+
+  @override
   Future<Either<StorageFailure, Unit>> prepare({
     required File raw,
     required Quad corners,

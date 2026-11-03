@@ -74,6 +74,8 @@ class PlatformTextRecognizer implements TextRecognizer {
     final List<Object?> blocks = (res['blocks'] as List<Object?>?) ?? const <Object?>[];
     return RawRecognition(
       blocksAreParagraphs: res['paragraphs'] == true,
+      width: _d(res['width']),
+      height: _d(res['height']),
       blocks: <List<Word>>[
         for (final Object? b in blocks)
           <Word>[

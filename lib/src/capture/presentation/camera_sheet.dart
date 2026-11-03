@@ -39,14 +39,28 @@ class CameraSheet extends StatefulWidget {
   State<CameraSheet> createState() => _CameraSheetState();
 }
 
-class _CameraSheetState extends State<CameraSheet> with WidgetsBindingObserver {
+class _CameraSheetState extends State<CameraSheet> with WidgetsBindingObserver, SingleTickerProviderStateMixin {
   double _drag = 0;
   bool? _lastDetected;
+
+  // The shot flying from the viewfinder into the page stack (design `qn-scan-shot`:
+  // 500 ms, cubic 0.4 0 0.2 1, down to 18% and 20% opacity).
+  late final AnimationController _fly;
+  final GlobalKey _sheetKey = GlobalKey();
+  final GlobalKey _viewKey = GlobalKey();
+  final GlobalKey _stackKey = GlobalKey();
+  File? _flying;
+  Rect? _flyFrom;
+  Rect? _flyTo;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _fly = AnimationController(vsync: this, duration: const Duration(milliseconds: 500))
+      ..addStatusListener((AnimationStatus s) {
+        if (s == AnimationStatus.completed && mounted) setState(() => _flying = null);
+      });
   }
 
   @override
@@ -63,7 +77,31 @@ class _CameraSheetState extends State<CameraSheet> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _fly.dispose();
     super.dispose();
+  }
+
+  Rect? _rectOf(GlobalKey k) {
+    final RenderObject? box = k.currentContext?.findRenderObject();
+    final RenderObject? root = _sheetKey.currentContext?.findRenderObject();
+    if (box is! RenderBox || root is! RenderBox || !box.hasSize) return null;
+    return box.localToGlobal(Offset.zero, ancestor: root) & box.size;
+  }
+
+  void _onStored(BuildContext context, CaptureState s) {
+    final File? f = s.lastThumbnail;
+    final Rect? view = _rectOf(_viewKey);
+    if (f == null || view == null) return;
+    // Starts where the design's shot card sits: 64% wide, 16% from the top.
+    final double w = view.width * 0.64;
+    final Rect from = Rect.fromLTWH(view.center.dx - w / 2, view.top + view.height * 0.16, w, w * 1.414);
+    final Rect to = _rectOf(_stackKey) ?? Rect.fromCenter(center: view.bottomLeft, width: 46, height: 60);
+    setState(() {
+      _flying = f;
+      _flyFrom = from;
+      _flyTo = to;
+    });
+    _fly.forward(from: 0);
   }
 
   void _onState(BuildContext context, CaptureState s) {
@@ -111,6 +149,10 @@ class _CameraSheetState extends State<CameraSheet> with WidgetsBindingObserver {
           listenWhen: (CaptureState a, CaptureState b) => a.shots != b.shots,
           listener: _onShot,
         ),
+        BlocListener<CaptureCubit, CaptureState>(
+          listenWhen: (CaptureState a, CaptureState b) => b.pageCount > a.pageCount || (b.replaced && !a.replaced),
+          listener: _onStored,
+        ),
       ],
       child: Transform.translate(
         offset: Offset(0, _drag),
@@ -119,70 +161,79 @@ class _CameraSheetState extends State<CameraSheet> with WidgetsBindingObserver {
             color: t.cameraSurface,
             borderRadius: BorderRadius.vertical(top: Radius.circular(t.radiusSheet)),
           ),
-          child: SafeArea(
-            child: BlocBuilder<CaptureCubit, CaptureState>(
-              builder: (BuildContext context, CaptureState st) {
-                final CaptureCubit cubit = context.read<CaptureCubit>();
-                return Column(
-                  children: <Widget>[
-                    GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onVerticalDragUpdate: (DragUpdateDetails d) =>
-                          setState(() => _drag = (_drag + d.delta.dy).clamp(0, double.infinity)),
-                      onVerticalDragEnd: (DragEndDetails d) {
-                        if (_drag > t.thumbnailSize * 2 || (d.primaryVelocity ?? 0) > 900) {
-                          widget.onCancel();
-                        } else {
-                          setState(() => _drag = 0);
-                        }
-                      },
-                      child: Column(
-                        children: <Widget>[
-                          ScanSheetHandle(color: t.onCameraSurface.withValues(alpha: 0.45)),
-                          ScanHeader(
-                            title: s.scanTitle,
-                            color: t.onCameraSurface,
-                            leading: ScanQuietButton(
-                              label: s.cancel,
-                              onPressed: widget.onCancel,
-                              color: t.onCameraSurface,
-                              textStyle: t.bodyStyle.sized(15, 22),
-                            ),
+          child: Stack(
+            key: _sheetKey,
+            children: <Widget>[
+              SafeArea(
+                child: BlocBuilder<CaptureCubit, CaptureState>(
+                  // Live corners repaint only the overlay, not the sheet.
+                  buildWhen: (CaptureState a, CaptureState b) => a.copyWith(quad: b.quad, hint: b.hint) != b,
+                  builder: (BuildContext context, CaptureState st) {
+                    final CaptureCubit cubit = context.read<CaptureCubit>();
+                    return Column(
+                      children: <Widget>[
+                        GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onVerticalDragUpdate: (DragUpdateDetails d) =>
+                              setState(() => _drag = (_drag + d.delta.dy).clamp(0, double.infinity)),
+                          onVerticalDragEnd: (DragEndDetails d) {
+                            if (_drag > t.thumbnailSize * 2 || (d.primaryVelocity ?? 0) > 900) {
+                              widget.onCancel();
+                            } else {
+                              setState(() => _drag = 0);
+                            }
+                          },
+                          child: Column(
+                            children: <Widget>[
+                              ScanSheetHandle(color: t.onCameraSurface.withValues(alpha: 0.45)),
+                              ScanHeader(
+                                title: s.scanTitle,
+                                color: t.onCameraSurface,
+                                leading: ScanQuietButton(
+                                  label: s.cancel,
+                                  onPressed: widget.onCancel,
+                                  color: t.onCameraSurface,
+                                  textStyle: t.bodyStyle.sized(15, 22),
+                                ),
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
-                    ),
-                    Expanded(
-                      child: st.phase == CapturePhase.ready
-                          ? _Viewfinder(
-                              state: st,
-                              preview: widget.preview,
-                              strings: s,
-                              adjusted: _adjusted,
-                              onAdjust: (Quad q) => setState(() => _adjusted = q),
-                            )
-                          : CameraPermissionView(
-                              phase: st.phase,
-                              strings: s,
-                              onRetry: cubit.recheckPermission,
-                              onOpenSettings: cubit.openSettings,
-                            ),
-                    ),
-                    if (st.adjustFile != null)
-                      _AdjustBar(
-                        strings: s,
-                        onRetake: () {
-                          setState(() => _adjusted = null);
-                          unawaited(cubit.retakeAdjusted());
-                        },
-                        onKeep: () => _keep(cubit),
-                      )
-                    else
-                      _BottomBar(state: st, strings: s, onReview: widget.onReview),
-                  ],
-                );
-              },
-            ),
+                        ),
+                        Expanded(
+                          child: st.phase == CapturePhase.ready
+                              ? _Viewfinder(
+                                  key: _viewKey,
+                                  state: st,
+                                  preview: widget.preview,
+                                  strings: s,
+                                  adjusted: _adjusted,
+                                  onAdjust: (Quad q) => setState(() => _adjusted = q),
+                                )
+                              : CameraPermissionView(
+                                  phase: st.phase,
+                                  strings: s,
+                                  onRetry: cubit.recheckPermission,
+                                  onOpenSettings: cubit.openSettings,
+                                ),
+                        ),
+                        if (st.adjustFile != null)
+                          _AdjustBar(
+                            strings: s,
+                            onRetake: () {
+                              setState(() => _adjusted = null);
+                              unawaited(cubit.retakeAdjusted());
+                            },
+                            onKeep: () => _keep(cubit),
+                          )
+                        else
+                          _BottomBar(state: st, strings: s, onReview: widget.onReview, stackKey: _stackKey),
+                      ],
+                    );
+                  },
+                ),
+              ),
+              if (_flying != null) _FlyingShot(file: _flying!, from: _flyFrom!, to: _flyTo!, animation: _fly),
+            ],
           ),
         ),
       ),
@@ -192,6 +243,7 @@ class _CameraSheetState extends State<CameraSheet> with WidgetsBindingObserver {
 
 class _Viewfinder extends StatelessWidget {
   const _Viewfinder({
+    super.key,
     required this.state,
     required this.preview,
     required this.strings,
@@ -228,25 +280,34 @@ class _Viewfinder extends StatelessWidget {
                 children: <Widget>[
                   preview(),
                   Positioned.fill(
-                    child: EdgeFrameOverlay(
-                      quad: state.quad,
-                      color: t.frameDetected,
-                      strokeWidth: 2.5,
-                      fill: t.frameDetected.withValues(alpha: 0.2),
+                    child: BlocSelector<CaptureCubit, CaptureState, Quad?>(
+                      selector: (CaptureState s) => s.quad,
+                      builder: (BuildContext context, Quad? quad) => EdgeFrameOverlay(
+                        quad: adjust == null ? quad : null,
+                        color: t.frameDetected,
+                        strokeWidth: 2.5,
+                        fill: t.frameDetected.withValues(alpha: 0.2),
+                      ),
                     ),
                   ),
                 ],
               ),
             ),
             if (adjust != null)
-              ColoredBox(
-                color: t.cameraSurface,
-                child: CornerEditor(
-                  key: ValueKey<String>(adjust.path),
-                  photo: adjust,
-                  quad: adjusted ?? state.adjustQuad ?? Quad.fullFrame,
-                  strings: strings,
-                  onChanged: onAdjust,
+              TweenAnimationBuilder<double>(
+                // Design `qn-fade`: the corner step fades in over 200 ms.
+                tween: Tween<double>(begin: 0, end: 1),
+                duration: const Duration(milliseconds: 200),
+                builder: (BuildContext context, double o, Widget? child) => Opacity(opacity: o, child: child),
+                child: ColoredBox(
+                  color: t.cameraSurface,
+                  child: CornerEditor(
+                    key: ValueKey<String>(adjust.path),
+                    photo: adjust,
+                    quad: adjusted ?? state.adjustQuad ?? Quad.fullFrame,
+                    strings: strings,
+                    onChanged: onAdjust,
+                  ),
                 ),
               ),
             Positioned.fill(
@@ -282,11 +343,14 @@ class _Viewfinder extends StatelessWidget {
 /// Design camera bottom bar: 12 / 24 / 40 padding, the page stack at the start,
 /// the shutter in the middle, «حفظ (N)» at the end.
 class _BottomBar extends StatelessWidget {
-  const _BottomBar({required this.state, required this.strings, required this.onReview});
+  const _BottomBar({required this.state, required this.strings, required this.onReview, required this.stackKey});
 
   final CaptureState state;
   final DocScanStrings strings;
   final VoidCallback onReview;
+
+  /// Where the flying shot lands.
+  final GlobalKey stackKey;
 
   @override
   Widget build(BuildContext context) {
@@ -301,9 +365,10 @@ class _BottomBar extends StatelessWidget {
             child: Align(
               alignment: AlignmentDirectional.centerStart,
               child: PageThumbnailBadge(
+                key: stackKey,
                 file: state.lastThumbnail,
                 count: state.pageCount,
-                shots: state.shots,
+                shots: state.pageCount,
                 label: strings.reviewPages,
                 onTap: hasPages ? onReview : null,
               ),
@@ -441,4 +506,48 @@ class _Shutter extends StatelessWidget {
       ),
     );
   }
+}
+
+/// The stored page shrinking from the viewfinder into the page stack.
+class _FlyingShot extends StatelessWidget {
+  const _FlyingShot({required this.file, required this.from, required this.to, required this.animation});
+
+  final File file;
+  final Rect from;
+  final Rect to;
+  final Animation<double> animation;
+
+  static const Cubic _curve = Cubic(0.4, 0, 0.2, 1);
+
+  @override
+  Widget build(BuildContext context) => Positioned.fill(
+    child: IgnorePointer(
+      child: AnimatedBuilder(
+        animation: animation,
+        builder: (BuildContext context, Widget? child) {
+          final double t = _curve.transform(animation.value);
+          return Stack(
+            children: <Widget>[
+              Positioned.fromRect(
+                rect: Rect.lerp(from, to, t)!,
+                child: Opacity(opacity: 1 - 0.8 * t, child: child),
+              ),
+            ],
+          );
+        },
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            boxShadow: <BoxShadow>[
+              BoxShadow(
+                color: DocScanTheme.of(context).scrim.withValues(alpha: 0.4),
+                blurRadius: 30,
+                offset: const Offset(0, 10),
+              ),
+            ],
+          ),
+          child: Image.file(file, fit: BoxFit.cover, gaplessPlayback: true),
+        ),
+      ),
+    ),
+  );
 }

@@ -20,6 +20,7 @@ abstract final class ScanMetrics {
   static const EdgeInsets ring = EdgeInsets.all(2);
   static const EdgeInsets movedRing = EdgeInsets.all(3);
   static const EdgeInsets pill = EdgeInsets.all(4);
+  static const EdgeInsets tableCell = EdgeInsets.symmetric(horizontal: 6, vertical: 4);
 
   static BorderRadius radius(double r) => BorderRadius.all(Radius.elliptical(r, r));
 }

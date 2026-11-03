@@ -4,15 +4,58 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
 import '../../core/session/document_edits.dart';
+import '../../core/session/scan_session.dart';
 import 'pdf_builder.dart' show PdfLook;
 
 /// One paragraph of a text-form page, as it will be sent: its direction and its
 /// final segments (text, or redactions that carry no characters).
 @immutable
 class PdfTextBlock {
-  const PdfTextBlock({required this.rtl, required this.segments});
+  const PdfTextBlock({
+    required this.rtl,
+    required this.segments,
+    this.align = BlockAlign.start,
+    this.size = 1,
+    this.heading = false,
+    this.spaceBefore = 0,
+    this.indent = 0,
+    this.table,
+    this.row,
+    this.col,
+  });
+
+  /// Builds a block from a recognized paragraph's layout.
+  factory PdfTextBlock.of(Paragraph p, List<FinalSegment> segments, {required bool rtl}) => PdfTextBlock(
+    rtl: p.mostlyLatin ? false : rtl,
+    segments: segments,
+    align: p.align,
+    size: p.size,
+    heading: p.heading,
+    spaceBefore: p.spaceBefore,
+    indent: p.indent,
+    table: p.table,
+    row: p.row,
+    col: p.col,
+  );
+
   final bool rtl;
   final List<FinalSegment> segments;
+  final BlockAlign align;
+
+  /// Print size relative to the body text.
+  final double size;
+  final bool heading;
+
+  /// Blank space above, in body line heights.
+  final double spaceBefore;
+
+  /// From the start margin, as a share of the text width.
+  final double indent;
+
+  /// Table cell placement, when the block is one.
+  final int? table;
+  final int? row;
+  final int? col;
 }
 
 /// Lays out the text-form PDF, one scanned page per run of PDF pages (FR-011).
@@ -55,6 +98,14 @@ class PlatformTextPdfRenderer implements TextPdfRenderer {
                 for (final PdfTextBlock b in page)
                   <String, Object>{
                     'rtl': b.rtl,
+                    'align': b.align.name,
+                    'size': b.size,
+                    'heading': b.heading,
+                    'space': b.spaceBefore,
+                    'indent': b.indent,
+                    if (b.table != null) 'table': b.table!,
+                    if (b.row != null) 'row': b.row!,
+                    if (b.col != null) 'col': b.col!,
                     'segments': <Map<String, Object>>[
                       for (final FinalSegment s in b.segments)
                         switch (s) {

@@ -5,7 +5,8 @@ import 'package:flutter/material.dart';
 import '../../core/scan_metrics.dart';
 import '../../core/doc_scan_theme.dart';
 
-/// A short white flash each time [shots] changes (story 2).
+/// A short white flash each time [shots] changes (story 2, design `qn-scan-flash`:
+/// 0.9 to 0 over 350 ms, ease out).
 class CaptureFlash extends StatefulWidget {
   const CaptureFlash({super.key, required this.shots, required this.color});
 
@@ -17,7 +18,7 @@ class CaptureFlash extends StatefulWidget {
 }
 
 class _CaptureFlashState extends State<CaptureFlash> with SingleTickerProviderStateMixin {
-  late final AnimationController _c = AnimationController(vsync: this, duration: const Duration(milliseconds: 260));
+  late final AnimationController _c = AnimationController(vsync: this, duration: const Duration(milliseconds: 350));
 
   @override
   void didUpdateWidget(CaptureFlash old) {
@@ -36,7 +37,11 @@ class _CaptureFlashState extends State<CaptureFlash> with SingleTickerProviderSt
     child: AnimatedBuilder(
       animation: _c,
       builder: (BuildContext context, Widget? _) =>
-          ColoredBox(color: widget.color.withValues(alpha: _c.isAnimating ? (1 - _c.value) * 0.85 : 0)),
+          ColoredBox(
+            color: widget.color.withValues(
+              alpha: _c.isAnimating ? (1 - Curves.easeOut.transform(_c.value)) * 0.9 : 0,
+            ),
+          ),
     ),
   );
 }
@@ -95,12 +100,10 @@ class PageThumbnailBadge extends StatelessWidget {
               Positioned.fill(
                 child: AnimatedSwitcher(
                   duration: const Duration(milliseconds: 320),
-                  transitionBuilder: (Widget child, Animation<double> a) => SlideTransition(
-                    position: Tween<Offset>(
-                      begin: const Offset(0, -2.5),
-                      end: Offset.zero,
-                    ).animate(CurvedAnimation(parent: a, curve: Curves.easeOutCubic)),
-                    child: ScaleTransition(scale: Tween<double>(begin: 1.8, end: 1).animate(a), child: child),
+                  // The flying shot lands here; the new sheet just settles in.
+                  transitionBuilder: (Widget child, Animation<double> a) => ScaleTransition(
+                    scale: Tween<double>(begin: 1.15, end: 1).animate(CurvedAnimation(parent: a, curve: Curves.easeOut)),
+                    child: child,
                   ),
                   child: Container(
                     key: ValueKey<int>(shots),

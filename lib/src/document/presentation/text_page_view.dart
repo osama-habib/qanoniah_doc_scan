@@ -1,5 +1,6 @@
 import 'dart:ui' as ui;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -42,32 +43,65 @@ class TextPageView extends StatelessWidget {
       );
     } else {
       final TextDirection dir = r.text.language == RecognitionLanguage.ar ? TextDirection.rtl : TextDirection.ltr;
-      content = Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
-          for (final Paragraph p in r.text.paragraphs)
+      Widget paragraph(Paragraph p) {
+        // Headings and larger print keep their size relative to the body.
+        final TextStyle style = body.copyWith(
+          fontSize: (body.fontSize ?? 14) * p.size.clamp(0.85, 1.8),
+          fontWeight: p.heading ? FontWeight.w700 : body.fontWeight,
+        );
+        if (editing == p.id) {
+          return _ParagraphEditor(
+            initial: st.edits.textOf(page.id, p),
+            dir: dir,
+            style: style,
+            align: _align(p.align),
+            onDone: (String text) {
+              context.read<PreviewCubit>().editParagraph(page.id, p, text);
+              onEditDone?.call();
+            },
+          );
+        }
+        if (st.edits.replacements.containsKey((page.id, p.id))) {
+          return Text(st.edits.textOf(page.id, p), textDirection: dir, textAlign: _align(p.align), style: style);
+        }
+        return _Words(page: page, paragraph: p, dir: dir, state: st, style: style);
+      }
+
+      final List<Widget> blocks = <Widget>[];
+      final List<Paragraph> ps = r.text.paragraphs;
+      for (int i = 0; i < ps.length; i++) {
+        final Paragraph p = ps[i];
+        // Blank space above as printed, capped so a sparse page stays readable.
+        final double gap = (p.spaceBefore.clamp(0, 3) * 8).toDouble();
+        if (p.table != null) {
+          int j = i;
+          while (j < ps.length && ps[j].table == p.table) {
+            j++;
+          }
+          blocks.add(
             Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: editing == p.id
-                  ? _ParagraphEditor(
-                      initial: st.edits.textOf(page.id, p),
-                      dir: dir,
-                      style: body,
-                      onDone: (String text) {
-                        context.read<PreviewCubit>().editParagraph(page.id, p, text);
-                        onEditDone?.call();
-                      },
-                    )
-                  : (st.edits.replacements.containsKey((page.id, p.id))
-                        ? Text(
-                            st.edits.textOf(page.id, p),
-                            textDirection: dir,
-                            textAlign: TextAlign.justify,
-                            style: body,
-                          )
-                        : _Words(page: page, paragraph: p, dir: dir, state: st, style: body)),
+              padding: EdgeInsets.only(top: gap),
+              child: _TableBlock(cells: ps.sublist(i, j), dir: dir, cell: paragraph),
             ),
-        ],
+          );
+          i = j - 1;
+          continue;
+        }
+        blocks.add(
+          Padding(
+            padding: EdgeInsetsDirectional.only(top: gap),
+            child: LayoutBuilder(
+              builder: (BuildContext context, BoxConstraints c) => Padding(
+                padding: EdgeInsetsDirectional.only(start: c.maxWidth * p.indent.clamp(0, 0.6)),
+                child: paragraph(p),
+              ),
+            ),
+          ),
+        );
+      }
+      content = Directionality(
+        textDirection: dir,
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: blocks),
       );
     }
     return Container(
@@ -79,13 +113,84 @@ class TextPageView extends StatelessWidget {
   }
 }
 
+TextAlign _align(BlockAlign a) => switch (a) {
+  BlockAlign.start => TextAlign.start,
+  BlockAlign.center => TextAlign.center,
+  BlockAlign.end => TextAlign.end,
+  BlockAlign.justify => TextAlign.justify,
+};
+
+/// A recognized table: ruled cells in their rows and columns. A single row of
+/// side-by-side text (two signatures) has no rules, each part toward its side.
+class _TableBlock extends StatelessWidget {
+  const _TableBlock({required this.cells, required this.dir, required this.cell});
+
+  final List<Paragraph> cells;
+  final TextDirection dir;
+  final Widget Function(Paragraph) cell;
+
+  @override
+  Widget build(BuildContext context) {
+    final DocScanTheme t = DocScanTheme.of(context);
+    int rows = 0;
+    int cols = 0;
+    for (final Paragraph p in cells) {
+      rows = rows < (p.row ?? 0) + 1 ? (p.row ?? 0) + 1 : rows;
+      cols = cols < (p.col ?? 0) + 1 ? (p.col ?? 0) + 1 : cols;
+    }
+    Paragraph? at(int r, int c) {
+      for (final Paragraph p in cells) {
+        if (p.row == r && p.col == c) return p;
+      }
+      return null;
+    }
+
+    if (rows == 1) {
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          for (int c = 0; c < cols; c++)
+            Expanded(
+              child: Align(
+                alignment: c == 0
+                    ? AlignmentDirectional.centerStart
+                    : (c == cols - 1 ? AlignmentDirectional.centerEnd : Alignment.center),
+                child: at(0, c) == null ? const SizedBox.shrink() : cell(at(0, c)!),
+              ),
+            ),
+        ],
+      );
+    }
+    return Table(
+      textDirection: dir,
+      border: TableBorder.all(color: t.border),
+      defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+      children: <TableRow>[
+        for (int r = 0; r < rows; r++)
+          TableRow(
+            children: <Widget>[
+              for (int c = 0; c < cols; c++)
+                Padding(
+                  padding: ScanMetrics.tableCell,
+                  child: at(r, c) == null ? const SizedBox.shrink() : cell(at(r, c)!),
+                ),
+            ],
+          ),
+      ],
+    );
+  }
+}
+
 /// The design's paper shadow: 0 1 2 and 0 6 16, both 8% black.
 List<BoxShadow> pageShadow(DocScanTheme t) => <BoxShadow>[
   BoxShadow(color: t.inverseSurface.withValues(alpha: 0.08), blurRadius: 2, offset: const Offset(0, 1)),
   BoxShadow(color: t.inverseSurface.withValues(alpha: 0.08), blurRadius: 16, offset: const Offset(0, 6)),
 ];
 
-class _Words extends StatelessWidget {
+/// One paragraph as real text runs, so the bidi algorithm orders Latin words
+/// inside Arabic lines (a placeholder per word would reverse them). Each word has
+/// its own tap recognizer; hidden words are blurred glyphs.
+class _Words extends StatefulWidget {
   const _Words({
     required this.page,
     required this.paragraph,
@@ -101,48 +206,85 @@ class _Words extends StatelessWidget {
   final TextStyle style;
 
   @override
+  State<_Words> createState() => _WordsState();
+}
+
+class _WordsState extends State<_Words> {
+  final List<TapGestureRecognizer> _taps = <TapGestureRecognizer>[];
+
+  @override
+  void dispose() {
+    for (final TapGestureRecognizer r in _taps) {
+      r.dispose();
+    }
+    super.dispose();
+  }
+
+  TapGestureRecognizer _tap(int i, VoidCallback onTap) {
+    while (_taps.length <= i) {
+      _taps.add(TapGestureRecognizer());
+    }
+    return _taps[i]..onTap = onTap;
+  }
+
+  @override
   Widget build(BuildContext context) {
     final DocScanTheme t = DocScanTheme.of(context);
     final PreviewCubit cubit = context.read<PreviewCubit>();
+    final Paragraph paragraph = widget.paragraph;
+    final PreviewState state = widget.state;
     final WordSelection? sel = state.selection;
-    final bool here = sel != null && sel.pageId == page.id && sel.paragraphId == paragraph.id;
-    final ParagraphKey key = (page.id, paragraph.id);
+    final bool here = sel != null && sel.pageId == widget.page.id && sel.paragraphId == paragraph.id;
+    final ParagraphKey key = (widget.page.id, paragraph.id);
     final bool wholeHidden = state.edits.isParagraphRedacted(key);
     final int n = paragraph.words.length;
+    // Justified prose reflows; other blocks keep their printed lines (lists,
+    // addresses, centered titles).
+    final bool keepLines = paragraph.align != BlockAlign.justify;
+    final Set<int> breaks = keepLines ? paragraph.lineStarts.toSet() : const <int>{};
+    final TextStyle base = widget.style;
+    final TextStyle hidden = base.copyWith(
+      foreground: Paint()
+        ..color = base.color ?? t.inverseSurface
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4),
+    );
+    final TextStyle selected = base.copyWith(backgroundColor: t.frameDetected.withValues(alpha: 0.28));
+    // A mostly Latin paragraph reads left to right even on an Arabic page.
+    final TextDirection dir = paragraph.mostlyLatin ? TextDirection.ltr : widget.dir;
     return Text.rich(
       TextSpan(
+        style: base,
         children: <InlineSpan>[
-          for (int i = 0; i < n; i++)
-            WidgetSpan(
-              alignment: PlaceholderAlignment.baseline,
-              baseline: TextBaseline.alphabetic,
-              child: GestureDetector(
-                onTap: () {
-                  if (here && sel.start == i && sel.end == i) return cubit.select(null);
-                  if (here) {
-                    final int a = i < sel.start ? i : sel.start;
-                    final int b = i > sel.end ? i : sel.end;
-                    return cubit.select(WordSelection(pageId: page.id, paragraphId: paragraph.id, start: a, end: b));
-                  }
-                  cubit.select(WordSelection(pageId: page.id, paragraphId: paragraph.id, start: i, end: i));
-                },
-                child: _Word(
-                  text: i < n - 1 ? '${paragraph.words[i].text} ' : paragraph.words[i].text,
-                  style: style,
-                  hidden: wholeHidden || state.edits.isWordRedacted(key, i),
-                  selected: here && i >= sel.start && i <= sel.end,
-                  highlight: t.frameDetected.withValues(alpha: 0.28),
-                ),
-              ),
+          for (int i = 0; i < n; i++) ...<InlineSpan>[
+            if (breaks.contains(i)) const TextSpan(text: '\n') else if (i > 0) const TextSpan(text: ' '),
+            TextSpan(
+              text: paragraph.words[i].text,
+              style: wholeHidden || state.edits.isWordRedacted(key, i)
+                  ? hidden
+                  : (here && i >= sel.start && i <= sel.end ? selected : null),
+              recognizer: _tap(i, () {
+                if (here && sel.start == i && sel.end == i) return cubit.select(null);
+                if (here) {
+                  final int a = i < sel.start ? i : sel.start;
+                  final int b = i > sel.end ? i : sel.end;
+                  return cubit.select(
+                    WordSelection(pageId: widget.page.id, paragraphId: paragraph.id, start: a, end: b),
+                  );
+                }
+                cubit.select(WordSelection(pageId: widget.page.id, paragraphId: paragraph.id, start: i, end: i));
+              }),
             ),
+          ],
         ],
       ),
       textDirection: dir,
-      textAlign: TextAlign.justify,
+      textAlign: _align(paragraph.align),
     );
   }
 }
 
+// TODO(unused): words are text runs now (_WordsState); kept for a widget per word.
+// ignore: unused_element
 class _Word extends StatelessWidget {
   const _Word({
     required this.text,
@@ -171,7 +313,15 @@ class _Word extends StatelessWidget {
 
 /// A paragraph open in place, on a light navy wash (design `ln.isEd`).
 class _ParagraphEditor extends StatefulWidget {
-  const _ParagraphEditor({required this.initial, required this.dir, required this.style, required this.onDone});
+  const _ParagraphEditor({
+    required this.initial,
+    required this.dir,
+    required this.style,
+    required this.onDone,
+    this.align = TextAlign.justify,
+  });
+
+  final TextAlign align;
 
   final String initial;
   final TextDirection dir;
@@ -226,7 +376,7 @@ class _ParagraphEditorState extends State<_ParagraphEditor> {
         focusNode: _focus,
         maxLines: null,
         textDirection: widget.dir,
-        textAlign: TextAlign.justify,
+        textAlign: widget.align,
         style: widget.style,
         onTapOutside: (_) => _focus.unfocus(),
         decoration: const InputDecoration.collapsed(hintText: null),

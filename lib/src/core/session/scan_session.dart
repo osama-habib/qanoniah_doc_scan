@@ -22,6 +22,9 @@ enum PageFilter {
   blackWhite,
 }
 
+/// How a block of recognized text sits between the page's text margins.
+enum BlockAlign { start, center, end, justify }
+
 /// Color of image-form PDF pages (story 14).
 enum ScanColorMode { color, gray, bw }
 
@@ -55,15 +58,60 @@ abstract class Word with _$Word {
   }) = _Word;
 }
 
-/// One paragraph of a page, its words in logical reading order.
+/// One paragraph of a page, its words in logical reading order, with where it sat
+/// on the page so the preview and the text PDF keep the layout (research R6,
+/// revised 2026-11-04).
 @freezed
 abstract class Paragraph with _$Paragraph {
   const Paragraph._();
 
-  const factory Paragraph({required String id, required List<Word> words}) =
-      _Paragraph;
+  const factory Paragraph({
+    required String id,
+    required List<Word> words,
+
+    /// Indexes into [words] where a new printed line starts (never 0).
+    @Default(<int>[]) List<int> lineStarts,
+
+    /// Bounds on the page, in image pixels.
+    Rect? box,
+    @Default(BlockAlign.start) BlockAlign align,
+
+    /// Printed line height relative to the page's median line.
+    @Default(1.0) double size,
+    @Default(false) bool heading,
+
+    /// Blank space above, in median line heights.
+    @Default(0.0) double spaceBefore,
+
+    /// Distance from the start margin, as a share of the text width.
+    @Default(0.0) double indent,
+
+    /// Set for a table cell: which table on the page, and the cell.
+    int? table,
+    int? row,
+
+    /// Column from the start side (the right for Arabic).
+    int? col,
+  }) = _Paragraph;
 
   String get text => words.map((Word w) => w.text).join(' ');
+
+  /// More words without Arabic letters than with: the paragraph reads left to
+  /// right even on an Arabic page.
+  bool get mostlyLatin => words.where((Word w) => !_arabic.hasMatch(w.text)).length * 2 > words.length;
+
+  static final RegExp _arabic = RegExp(r'[\u0600-\u06FF\u0750-\u077F\uFB50-\uFDFF\uFE70-\uFEFF]');
+
+  /// The words grouped by printed line.
+  List<List<Word>> get lines {
+    final List<List<Word>> out = <List<Word>>[];
+    int from = 0;
+    for (final int s in <int>[...lineStarts, words.length]) {
+      if (s > from) out.add(words.sublist(from, s));
+      from = s;
+    }
+    return out;
+  }
 }
 
 /// Post-processed text of one page (research R6).
@@ -72,6 +120,10 @@ abstract class PageText with _$PageText {
   const factory PageText({
     required RecognitionLanguage language,
     required List<Paragraph> paragraphs,
+
+    /// The recognized image's size; 0 when unknown.
+    @Default(0.0) double width,
+    @Default(0.0) double height,
   }) = _PageText;
 }
 

@@ -139,9 +139,10 @@ class PdfBuilder {
           switch (p.recognition) {
             RecognitionDone(:final PageText text) => <PdfTextBlock>[
               for (final Paragraph para in text.paragraphs)
-                PdfTextBlock(
+                PdfTextBlock.of(
+                  para,
+                  edits.finalSegments(p.id, para),
                   rtl: text.language == RecognitionLanguage.ar,
-                  segments: edits.finalSegments(p.id, para),
                 ),
             ],
             _ => const <PdfTextBlock>[],

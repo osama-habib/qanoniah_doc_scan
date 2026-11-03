@@ -393,6 +393,30 @@ mixin _$Paragraph {
   String get id => throw _privateConstructorUsedError;
   List<Word> get words => throw _privateConstructorUsedError;
 
+  /// Indexes into [words] where a new printed line starts (never 0).
+  List<int> get lineStarts => throw _privateConstructorUsedError;
+
+  /// Bounds on the page, in image pixels.
+  Rect? get box => throw _privateConstructorUsedError;
+  BlockAlign get align => throw _privateConstructorUsedError;
+
+  /// Printed line height relative to the page's median line.
+  double get size => throw _privateConstructorUsedError;
+  bool get heading => throw _privateConstructorUsedError;
+
+  /// Blank space above, in median line heights.
+  double get spaceBefore => throw _privateConstructorUsedError;
+
+  /// Distance from the start margin, as a share of the text width.
+  double get indent => throw _privateConstructorUsedError;
+
+  /// Set for a table cell: which table on the page, and the cell.
+  int? get table => throw _privateConstructorUsedError;
+  int? get row => throw _privateConstructorUsedError;
+
+  /// Column from the start side (the right for Arabic).
+  int? get col => throw _privateConstructorUsedError;
+
   /// Create a copy of Paragraph
   /// with the given fields replaced by the non-null parameter values.
   @JsonKey(includeFromJson: false, includeToJson: false)
@@ -405,7 +429,20 @@ abstract class $ParagraphCopyWith<$Res> {
   factory $ParagraphCopyWith(Paragraph value, $Res Function(Paragraph) then) =
       _$ParagraphCopyWithImpl<$Res, Paragraph>;
   @useResult
-  $Res call({String id, List<Word> words});
+  $Res call({
+    String id,
+    List<Word> words,
+    List<int> lineStarts,
+    Rect? box,
+    BlockAlign align,
+    double size,
+    bool heading,
+    double spaceBefore,
+    double indent,
+    int? table,
+    int? row,
+    int? col,
+  });
 }
 
 /// @nodoc
@@ -422,7 +459,20 @@ class _$ParagraphCopyWithImpl<$Res, $Val extends Paragraph>
   /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
-  $Res call({Object? id = null, Object? words = null}) {
+  $Res call({
+    Object? id = null,
+    Object? words = null,
+    Object? lineStarts = null,
+    Object? box = freezed,
+    Object? align = null,
+    Object? size = null,
+    Object? heading = null,
+    Object? spaceBefore = null,
+    Object? indent = null,
+    Object? table = freezed,
+    Object? row = freezed,
+    Object? col = freezed,
+  }) {
     return _then(
       _value.copyWith(
             id: null == id
@@ -433,6 +483,46 @@ class _$ParagraphCopyWithImpl<$Res, $Val extends Paragraph>
                 ? _value.words
                 : words // ignore: cast_nullable_to_non_nullable
                       as List<Word>,
+            lineStarts: null == lineStarts
+                ? _value.lineStarts
+                : lineStarts // ignore: cast_nullable_to_non_nullable
+                      as List<int>,
+            box: freezed == box
+                ? _value.box
+                : box // ignore: cast_nullable_to_non_nullable
+                      as Rect?,
+            align: null == align
+                ? _value.align
+                : align // ignore: cast_nullable_to_non_nullable
+                      as BlockAlign,
+            size: null == size
+                ? _value.size
+                : size // ignore: cast_nullable_to_non_nullable
+                      as double,
+            heading: null == heading
+                ? _value.heading
+                : heading // ignore: cast_nullable_to_non_nullable
+                      as bool,
+            spaceBefore: null == spaceBefore
+                ? _value.spaceBefore
+                : spaceBefore // ignore: cast_nullable_to_non_nullable
+                      as double,
+            indent: null == indent
+                ? _value.indent
+                : indent // ignore: cast_nullable_to_non_nullable
+                      as double,
+            table: freezed == table
+                ? _value.table
+                : table // ignore: cast_nullable_to_non_nullable
+                      as int?,
+            row: freezed == row
+                ? _value.row
+                : row // ignore: cast_nullable_to_non_nullable
+                      as int?,
+            col: freezed == col
+                ? _value.col
+                : col // ignore: cast_nullable_to_non_nullable
+                      as int?,
           )
           as $Val,
     );
@@ -448,7 +538,20 @@ abstract class _$$ParagraphImplCopyWith<$Res>
   ) = __$$ParagraphImplCopyWithImpl<$Res>;
   @override
   @useResult
-  $Res call({String id, List<Word> words});
+  $Res call({
+    String id,
+    List<Word> words,
+    List<int> lineStarts,
+    Rect? box,
+    BlockAlign align,
+    double size,
+    bool heading,
+    double spaceBefore,
+    double indent,
+    int? table,
+    int? row,
+    int? col,
+  });
 }
 
 /// @nodoc
@@ -464,7 +567,20 @@ class __$$ParagraphImplCopyWithImpl<$Res>
   /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
-  $Res call({Object? id = null, Object? words = null}) {
+  $Res call({
+    Object? id = null,
+    Object? words = null,
+    Object? lineStarts = null,
+    Object? box = freezed,
+    Object? align = null,
+    Object? size = null,
+    Object? heading = null,
+    Object? spaceBefore = null,
+    Object? indent = null,
+    Object? table = freezed,
+    Object? row = freezed,
+    Object? col = freezed,
+  }) {
     return _then(
       _$ParagraphImpl(
         id: null == id
@@ -475,6 +591,46 @@ class __$$ParagraphImplCopyWithImpl<$Res>
             ? _value._words
             : words // ignore: cast_nullable_to_non_nullable
                   as List<Word>,
+        lineStarts: null == lineStarts
+            ? _value._lineStarts
+            : lineStarts // ignore: cast_nullable_to_non_nullable
+                  as List<int>,
+        box: freezed == box
+            ? _value.box
+            : box // ignore: cast_nullable_to_non_nullable
+                  as Rect?,
+        align: null == align
+            ? _value.align
+            : align // ignore: cast_nullable_to_non_nullable
+                  as BlockAlign,
+        size: null == size
+            ? _value.size
+            : size // ignore: cast_nullable_to_non_nullable
+                  as double,
+        heading: null == heading
+            ? _value.heading
+            : heading // ignore: cast_nullable_to_non_nullable
+                  as bool,
+        spaceBefore: null == spaceBefore
+            ? _value.spaceBefore
+            : spaceBefore // ignore: cast_nullable_to_non_nullable
+                  as double,
+        indent: null == indent
+            ? _value.indent
+            : indent // ignore: cast_nullable_to_non_nullable
+                  as double,
+        table: freezed == table
+            ? _value.table
+            : table // ignore: cast_nullable_to_non_nullable
+                  as int?,
+        row: freezed == row
+            ? _value.row
+            : row // ignore: cast_nullable_to_non_nullable
+                  as int?,
+        col: freezed == col
+            ? _value.col
+            : col // ignore: cast_nullable_to_non_nullable
+                  as int?,
       ),
     );
   }
@@ -483,9 +639,22 @@ class __$$ParagraphImplCopyWithImpl<$Res>
 /// @nodoc
 
 class _$ParagraphImpl extends _Paragraph {
-  const _$ParagraphImpl({required this.id, required final List<Word> words})
-    : _words = words,
-      super._();
+  const _$ParagraphImpl({
+    required this.id,
+    required final List<Word> words,
+    final List<int> lineStarts = const <int>[],
+    this.box,
+    this.align = BlockAlign.start,
+    this.size = 1.0,
+    this.heading = false,
+    this.spaceBefore = 0.0,
+    this.indent = 0.0,
+    this.table,
+    this.row,
+    this.col,
+  }) : _words = words,
+       _lineStarts = lineStarts,
+       super._();
 
   @override
   final String id;
@@ -497,9 +666,56 @@ class _$ParagraphImpl extends _Paragraph {
     return EqualUnmodifiableListView(_words);
   }
 
+  /// Indexes into [words] where a new printed line starts (never 0).
+  final List<int> _lineStarts;
+
+  /// Indexes into [words] where a new printed line starts (never 0).
+  @override
+  @JsonKey()
+  List<int> get lineStarts {
+    if (_lineStarts is EqualUnmodifiableListView) return _lineStarts;
+    // ignore: implicit_dynamic_type
+    return EqualUnmodifiableListView(_lineStarts);
+  }
+
+  /// Bounds on the page, in image pixels.
+  @override
+  final Rect? box;
+  @override
+  @JsonKey()
+  final BlockAlign align;
+
+  /// Printed line height relative to the page's median line.
+  @override
+  @JsonKey()
+  final double size;
+  @override
+  @JsonKey()
+  final bool heading;
+
+  /// Blank space above, in median line heights.
+  @override
+  @JsonKey()
+  final double spaceBefore;
+
+  /// Distance from the start margin, as a share of the text width.
+  @override
+  @JsonKey()
+  final double indent;
+
+  /// Set for a table cell: which table on the page, and the cell.
+  @override
+  final int? table;
+  @override
+  final int? row;
+
+  /// Column from the start side (the right for Arabic).
+  @override
+  final int? col;
+
   @override
   String toString() {
-    return 'Paragraph(id: $id, words: $words)';
+    return 'Paragraph(id: $id, words: $words, lineStarts: $lineStarts, box: $box, align: $align, size: $size, heading: $heading, spaceBefore: $spaceBefore, indent: $indent, table: $table, row: $row, col: $col)';
   }
 
   @override
@@ -508,12 +724,39 @@ class _$ParagraphImpl extends _Paragraph {
         (other.runtimeType == runtimeType &&
             other is _$ParagraphImpl &&
             (identical(other.id, id) || other.id == id) &&
-            const DeepCollectionEquality().equals(other._words, _words));
+            const DeepCollectionEquality().equals(other._words, _words) &&
+            const DeepCollectionEquality().equals(
+              other._lineStarts,
+              _lineStarts,
+            ) &&
+            (identical(other.box, box) || other.box == box) &&
+            (identical(other.align, align) || other.align == align) &&
+            (identical(other.size, size) || other.size == size) &&
+            (identical(other.heading, heading) || other.heading == heading) &&
+            (identical(other.spaceBefore, spaceBefore) ||
+                other.spaceBefore == spaceBefore) &&
+            (identical(other.indent, indent) || other.indent == indent) &&
+            (identical(other.table, table) || other.table == table) &&
+            (identical(other.row, row) || other.row == row) &&
+            (identical(other.col, col) || other.col == col));
   }
 
   @override
-  int get hashCode =>
-      Object.hash(runtimeType, id, const DeepCollectionEquality().hash(_words));
+  int get hashCode => Object.hash(
+    runtimeType,
+    id,
+    const DeepCollectionEquality().hash(_words),
+    const DeepCollectionEquality().hash(_lineStarts),
+    box,
+    align,
+    size,
+    heading,
+    spaceBefore,
+    indent,
+    table,
+    row,
+    col,
+  );
 
   /// Create a copy of Paragraph
   /// with the given fields replaced by the non-null parameter values.
@@ -528,6 +771,16 @@ abstract class _Paragraph extends Paragraph {
   const factory _Paragraph({
     required final String id,
     required final List<Word> words,
+    final List<int> lineStarts,
+    final Rect? box,
+    final BlockAlign align,
+    final double size,
+    final bool heading,
+    final double spaceBefore,
+    final double indent,
+    final int? table,
+    final int? row,
+    final int? col,
   }) = _$ParagraphImpl;
   const _Paragraph._() : super._();
 
@@ -535,6 +788,40 @@ abstract class _Paragraph extends Paragraph {
   String get id;
   @override
   List<Word> get words;
+
+  /// Indexes into [words] where a new printed line starts (never 0).
+  @override
+  List<int> get lineStarts;
+
+  /// Bounds on the page, in image pixels.
+  @override
+  Rect? get box;
+  @override
+  BlockAlign get align;
+
+  /// Printed line height relative to the page's median line.
+  @override
+  double get size;
+  @override
+  bool get heading;
+
+  /// Blank space above, in median line heights.
+  @override
+  double get spaceBefore;
+
+  /// Distance from the start margin, as a share of the text width.
+  @override
+  double get indent;
+
+  /// Set for a table cell: which table on the page, and the cell.
+  @override
+  int? get table;
+  @override
+  int? get row;
+
+  /// Column from the start side (the right for Arabic).
+  @override
+  int? get col;
 
   /// Create a copy of Paragraph
   /// with the given fields replaced by the non-null parameter values.
@@ -549,6 +836,10 @@ mixin _$PageText {
   RecognitionLanguage get language => throw _privateConstructorUsedError;
   List<Paragraph> get paragraphs => throw _privateConstructorUsedError;
 
+  /// The recognized image's size; 0 when unknown.
+  double get width => throw _privateConstructorUsedError;
+  double get height => throw _privateConstructorUsedError;
+
   /// Create a copy of PageText
   /// with the given fields replaced by the non-null parameter values.
   @JsonKey(includeFromJson: false, includeToJson: false)
@@ -561,7 +852,12 @@ abstract class $PageTextCopyWith<$Res> {
   factory $PageTextCopyWith(PageText value, $Res Function(PageText) then) =
       _$PageTextCopyWithImpl<$Res, PageText>;
   @useResult
-  $Res call({RecognitionLanguage language, List<Paragraph> paragraphs});
+  $Res call({
+    RecognitionLanguage language,
+    List<Paragraph> paragraphs,
+    double width,
+    double height,
+  });
 }
 
 /// @nodoc
@@ -578,7 +874,12 @@ class _$PageTextCopyWithImpl<$Res, $Val extends PageText>
   /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
-  $Res call({Object? language = null, Object? paragraphs = null}) {
+  $Res call({
+    Object? language = null,
+    Object? paragraphs = null,
+    Object? width = null,
+    Object? height = null,
+  }) {
     return _then(
       _value.copyWith(
             language: null == language
@@ -589,6 +890,14 @@ class _$PageTextCopyWithImpl<$Res, $Val extends PageText>
                 ? _value.paragraphs
                 : paragraphs // ignore: cast_nullable_to_non_nullable
                       as List<Paragraph>,
+            width: null == width
+                ? _value.width
+                : width // ignore: cast_nullable_to_non_nullable
+                      as double,
+            height: null == height
+                ? _value.height
+                : height // ignore: cast_nullable_to_non_nullable
+                      as double,
           )
           as $Val,
     );
@@ -604,7 +913,12 @@ abstract class _$$PageTextImplCopyWith<$Res>
   ) = __$$PageTextImplCopyWithImpl<$Res>;
   @override
   @useResult
-  $Res call({RecognitionLanguage language, List<Paragraph> paragraphs});
+  $Res call({
+    RecognitionLanguage language,
+    List<Paragraph> paragraphs,
+    double width,
+    double height,
+  });
 }
 
 /// @nodoc
@@ -620,7 +934,12 @@ class __$$PageTextImplCopyWithImpl<$Res>
   /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
-  $Res call({Object? language = null, Object? paragraphs = null}) {
+  $Res call({
+    Object? language = null,
+    Object? paragraphs = null,
+    Object? width = null,
+    Object? height = null,
+  }) {
     return _then(
       _$PageTextImpl(
         language: null == language
@@ -631,6 +950,14 @@ class __$$PageTextImplCopyWithImpl<$Res>
             ? _value._paragraphs
             : paragraphs // ignore: cast_nullable_to_non_nullable
                   as List<Paragraph>,
+        width: null == width
+            ? _value.width
+            : width // ignore: cast_nullable_to_non_nullable
+                  as double,
+        height: null == height
+            ? _value.height
+            : height // ignore: cast_nullable_to_non_nullable
+                  as double,
       ),
     );
   }
@@ -642,6 +969,8 @@ class _$PageTextImpl implements _PageText {
   const _$PageTextImpl({
     required this.language,
     required final List<Paragraph> paragraphs,
+    this.width = 0.0,
+    this.height = 0.0,
   }) : _paragraphs = paragraphs;
 
   @override
@@ -654,9 +983,17 @@ class _$PageTextImpl implements _PageText {
     return EqualUnmodifiableListView(_paragraphs);
   }
 
+  /// The recognized image's size; 0 when unknown.
+  @override
+  @JsonKey()
+  final double width;
+  @override
+  @JsonKey()
+  final double height;
+
   @override
   String toString() {
-    return 'PageText(language: $language, paragraphs: $paragraphs)';
+    return 'PageText(language: $language, paragraphs: $paragraphs, width: $width, height: $height)';
   }
 
   @override
@@ -669,7 +1006,9 @@ class _$PageTextImpl implements _PageText {
             const DeepCollectionEquality().equals(
               other._paragraphs,
               _paragraphs,
-            ));
+            ) &&
+            (identical(other.width, width) || other.width == width) &&
+            (identical(other.height, height) || other.height == height));
   }
 
   @override
@@ -677,6 +1016,8 @@ class _$PageTextImpl implements _PageText {
     runtimeType,
     language,
     const DeepCollectionEquality().hash(_paragraphs),
+    width,
+    height,
   );
 
   /// Create a copy of PageText
@@ -692,12 +1033,20 @@ abstract class _PageText implements PageText {
   const factory _PageText({
     required final RecognitionLanguage language,
     required final List<Paragraph> paragraphs,
+    final double width,
+    final double height,
   }) = _$PageTextImpl;
 
   @override
   RecognitionLanguage get language;
   @override
   List<Paragraph> get paragraphs;
+
+  /// The recognized image's size; 0 when unknown.
+  @override
+  double get width;
+  @override
+  double get height;
 
   /// Create a copy of PageText
   /// with the given fields replaced by the non-null parameter values.

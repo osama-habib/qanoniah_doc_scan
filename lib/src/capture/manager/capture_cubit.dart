@@ -174,8 +174,6 @@ class CaptureCubit extends Cubit<CaptureState> {
         final Quad found = await _edges.detectInPhoto(raw) ?? corners;
         if (isClosed) return;
         if (!adjust) return _store(raw, found);
-        await _camera.pause();
-        if (isClosed) return;
         emit(state.copyWith(capturing: false, shots: state.shots + 1, adjustFile: raw, adjustQuad: found));
       },
     );
@@ -186,8 +184,6 @@ class CaptureCubit extends Cubit<CaptureState> {
     final File? raw = state.adjustFile;
     if (raw == null || state.capturing) return;
     emit(state.copyWith(capturing: true, adjustFile: null, adjustQuad: null));
-    await _camera.resume();
-    if (isClosed) return;
     await _store(raw, corners);
   }
 
@@ -199,7 +195,6 @@ class CaptureCubit extends Cubit<CaptureState> {
     try {
       await raw.delete();
     } on FileSystemException catch (_) {}
-    await _camera.resume();
   }
 
   /// Tells the session nothing; the flow decides between back-to-review and cancel.

@@ -170,32 +170,27 @@ class VisionEdgeDetector implements EdgeDetector {
     if (_busy) return _last;
     _busy = true;
     try {
-      final Uint8List bytes = frame.luminance;
-      final int w = frame.width;
-      final int h = frame.height;
-      final Future<(double, double, List<int>)> stats = Isolate.run(() {
-        final (double sharp, double lum) = frameStats(bytes, w, h);
-        return (sharp, lum, frameSignature(bytes, w, h));
-      });
-      final List<Object?>? corners = await _channel.invokeListMethod<Object?>(
-        'detectRectangle',
-        <String, Object>{'bytes': bytes, 'width': w, 'height': h},
+      // One native call: corners, sharpness, brightness and signature.
+      final Map<Object?, Object?>? res = await _channel.invokeMapMethod<Object?, Object?>(
+        'analyzeFrame',
+        <String, Object>{'bytes': frame.luminance, 'width': frame.width, 'height': frame.height},
       );
-      final (double sharpness, double luminance, List<int> signature) = await stats;
+      if (res == null) return _last;
+      final List<Object?>? corners = res['corners'] as List<Object?>?;
       Quad? quad;
       if (corners != null && corners.length == 8) {
-        final List<double> c = corners
-            .map((Object? v) => (v as num?)?.toDouble() ?? 0)
-            .toList();
+        final List<double> c = corners.map((Object? v) => (v as num?)?.toDouble() ?? 0).toList();
         quad = orderCorners(<Offset>[
           for (int i = 0; i < 8; i += 2) Offset(c[i], c[i + 1]),
         ]);
       }
       return _last = FrameAnalysis(
         quad: quad,
-        sharpness: sharpness,
-        luminance: luminance,
-        signature: signature,
+        sharpness: (res['sharpness'] as num?)?.toDouble() ?? 0,
+        luminance: (res['luminance'] as num?)?.toDouble() ?? 0,
+        signature: <int>[
+          for (final Object? v in (res['signature'] as List<Object?>? ?? const <Object?>[])) (v as num).toInt(),
+        ],
       );
     } on MissingPluginException {
       _useFallback = true;

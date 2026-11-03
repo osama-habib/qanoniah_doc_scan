@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:dartz/dartz.dart';
+import 'package:flutter/services.dart';
 import 'package:image/image.dart' as img;
 
 import '../../core/failures.dart';
@@ -12,11 +13,25 @@ import '../../core/session/scan_session.dart';
 /// Layer 1 of the OCR service: one image pipeline that serves the page the user sees
 /// and the hidden recognition input (FR-051, research R3).
 ///
-/// Pure Dart over the `image` package, so it runs the same on every device and
-/// simulator and is unit-tested directly (research R2/R3 revised 2026-11-03:
+/// On iOS the work runs on the GPU through Core Image (`preparePage` on the
+/// `qanoniah_doc_scan/prep` channel): a page takes a fraction of a second. Where the
+/// channel is missing (tests, other platforms) it falls back to the pure Dart
+/// pipeline below over the `image` package (research R2/R3 revised 2026-11-03:
 /// opencv_dart had no arm64 simulator build and added about 155 MB of static code).
 class PagePreparer {
-  const PagePreparer({this.maxLongEdge = 2200, this.jpegQuality = 90});
+  const PagePreparer({
+    this.maxLongEdge = 2200,
+    this.jpegQuality = 90,
+    this.native = true,
+    MethodChannel channel = const MethodChannel('qanoniah_doc_scan/prep'),
+  }) : _channel = channel;
+
+  /// False forces the Dart pipeline (benchmarks, tests).
+  final bool native;
+  final MethodChannel _channel;
+
+  /// Set once the platform has no native pipeline, so later pages skip the call.
+  static bool _nativeMissing = false;
 
   /// Prepared pages are never larger than this; the size fitter may shrink further.
   final int maxLongEdge;
@@ -38,6 +53,24 @@ class PagePreparer {
     final List<int> filterIndexes = filters.map((PageFilter f) => f.index).toList();
     final int longEdge = maxLongEdge;
     final int quality = jpegQuality;
+    if (native && !_nativeMissing) {
+      try {
+        await _channel.invokeMapMethod<String, Object?>('preparePage', <String, Object>{
+          'raw': rawPath,
+          'quad': quad,
+          'filters': filters.map((PageFilter f) => f.name).toList(),
+          'prepared': preparedPath,
+          'ocr': ocrPath,
+          'maxLongEdge': longEdge,
+          'quality': quality,
+        });
+        return const Right<StorageFailure, Unit>(unit);
+      } on MissingPluginException {
+        _nativeMissing = true;
+      } on PlatformException {
+        // Fall through to the Dart pipeline for this page.
+      }
+    }
     try {
       final bool ok = await Isolate.run(
         () => preparePage(rawPath, quad, filterIndexes, preparedPath, ocrPath, longEdge, quality),
@@ -82,7 +115,9 @@ bool preparePage(
   if (filters.contains(PageFilter.grayscale)) page = img.grayscale(page);
   if (filters.contains(PageFilter.blackWhite)) page = _toImage(adaptiveThreshold(luminanceOf(page), page.width, page.height), page.width, page.height);
 
-  File(preparedPath).writeAsBytesSync(img.encodeJpg(page, quality: jpegQuality), flush: true);
+  // The JPEG encoder mishandles one-channel images: write black and white as RGB.
+  final img.Image visible = page.numChannels == 1 ? page.convert(numChannels: 3) : page;
+  File(preparedPath).writeAsBytesSync(img.encodeJpg(visible, quality: jpegQuality), flush: true);
 
   // Recognition input: shadows removed and binarized on top of the user's filters.
   Uint8List gray = luminanceOf(page);
@@ -100,8 +135,10 @@ img.Image warp(img.Image src, List<double> q, int maxLongEdge) {
     for (int i = 0; i < 8; i += 2) math.Point<double>(q[i] * (w - 1), q[i + 1] * (h - 1)),
   ];
   // Corner distances count gaps between pixels; the page has one more pixel.
-  final double outW = math.max(p[0].distanceTo(p[1]), p[3].distanceTo(p[2])) + 1;
-  final double outH = math.max(p[0].distanceTo(p[3]), p[1].distanceTo(p[2])) + 1;
+  double outW = math.max(p[0].distanceTo(p[1]), p[3].distanceTo(p[2])) + 1;
+  double outH = math.max(p[0].distanceTo(p[3]), p[1].distanceTo(p[2])) + 1;
+  final double? aspect = pageAspect(q, w, h);
+  if (aspect != null) outW = outH * aspect;
   final double scale = math.min(1, maxLongEdge / math.max(outW, outH));
   final int ow = math.max(1, (outW * scale).round());
   final int oh = math.max(1, (outH * scale).round());
@@ -115,6 +152,50 @@ img.Image warp(img.Image src, List<double> q, int maxLongEdge) {
     interpolation: img.Interpolation.linear,
     toImage: img.Image(width: ow, height: oh, numChannels: src.numChannels),
   );
+}
+
+/// The page's real width / height, recovered from the perspective of its corners
+/// [q] (tl, tr, br, bl normalized) in a [w] x [h] photo, with the camera's focal
+/// length estimated from the same corners (Zhang and He, "Whiteboard scanning
+/// and image enhancement", 2007). When the corners cannot fix the focal length
+/// (one edge pair parallel, or noise) a typical phone lens is assumed: about 0.75
+/// of the long side. Null only for degenerate corners.
+double? pageAspect(List<double> q, double w, double h) {
+  final double u0 = w / 2;
+  final double v0 = h / 2;
+  List<double> m(int i) => <double>[q[i] * w, q[i + 1] * h, 1];
+  final List<double> m1 = m(0); // tl
+  final List<double> m2 = m(2); // tr
+  final List<double> m3 = m(6); // bl
+  final List<double> m4 = m(4); // br
+  List<double> cross(List<double> a, List<double> b) =>
+      <double>[a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  double dot(List<double> a, List<double> b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  final double d2 = dot(cross(m2, m4), m3);
+  final double d3 = dot(cross(m3, m4), m2);
+  if (d2.abs() < 1e-9 || d3.abs() < 1e-9) return null;
+  final double k2 = dot(cross(m1, m4), m3) / d2;
+  final double k3 = dot(cross(m1, m4), m2) / d3;
+  final List<double> n2 = <double>[k2 * m2[0] - m1[0], k2 * m2[1] - m1[1], k2 * m2[2] - m1[2]];
+  final List<double> n3 = <double>[k3 * m3[0] - m1[0], k3 * m3[1] - m1[1], k3 * m3[2] - m1[2]];
+  final double fallback = 0.75 * math.max(w, h);
+  final double f2 = -((n2[0] * n3[0] - (n2[0] * n3[2] + n2[2] * n3[0]) * u0 + n2[2] * n3[2] * u0 * u0) +
+          (n2[1] * n3[1] - (n2[1] * n3[2] + n2[2] * n3[1]) * v0 + n2[2] * n3[2] * v0 * v0)) /
+      (n2[2] * n3[2] == 0 ? 1e-12 : n2[2] * n3[2]);
+  // With an edge pair (almost) parallel its vanishing point is at infinity and the
+  // focal length is not observable; a value outside a phone's range means noise.
+  bool parallel(List<double> n) => n[2].abs() * math.max(w, h) < 0.02 * math.sqrt(n[0] * n[0] + n[1] * n[1]);
+  final double solved = !parallel(n2) && !parallel(n3) && f2.isFinite && f2 > 0 ? math.sqrt(f2) : 0;
+  final double f = solved >= 0.5 * math.max(w, h) && solved <= 3 * math.max(w, h) ? solved : fallback;
+  // (A^-T A^-1) n, with A the camera matrix.
+  double norm(List<double> n) {
+    final double x = (n[0] - u0 * n[2]) / f;
+    final double y = (n[1] - v0 * n[2]) / f;
+    return x * x + y * y + n[2] * n[2];
+  }
+
+  final double r = math.sqrt(norm(n2) / norm(n3));
+  return r.isFinite && r > 0.2 && r < 5 ? r : null;
 }
 
 /// 8-bit luminance (Rec. 709) of every pixel, row-major.

@@ -6,6 +6,7 @@ import android.graphics.RectF
 import android.graphics.Typeface
 import android.graphics.pdf.PdfDocument
 import android.os.Build
+import android.text.Layout
 import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.text.StaticLayout
@@ -14,6 +15,7 @@ import android.text.TextPaint
 import android.text.style.ReplacementSpan
 import java.io.ByteArrayOutputStream
 import java.io.File
+import kotlin.math.max
 
 /**
  * The text-form PDF through Android's own text engine: `StaticLayout` for shaping,
@@ -33,83 +35,204 @@ object TextPdfRenderer {
     fun render(args: Map<*, *>, cacheDir: File): ByteArray? {
         val fontBytes = args["font"] as? ByteArray ?: return null
         val pages = args["pages"] as? List<*> ?: return null
-        val typeface = typeface(fontBytes, args["fontFallback"] as? ByteArray, cacheDir)
-        val ink = argb(args["text"])
-        val fill = argb(args["fill"])
-        val onFill = argb(args["onFill"])
-        val label = args["label"] as? String ?: ""
-
-        val paint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-            this.typeface = typeface
-            textSize = FONT_SIZE
-            color = ink
-        }
-        val width = (PAGE_W - 2 * MARGIN_X).toInt()
-        val height = PAGE_H - 2 * MARGIN_Y
-
+        val typeface = typeface(fontBytes, args["fontFallback"] as? ByteArray, cacheDir, "pdf_font")
+        val bold = (args["fontBold"] as? ByteArray)?.let { typeface(it, args["fontFallback"] as? ByteArray, cacheDir, "pdf_font_bold") }
+            ?: Typeface.create(typeface, Typeface.BOLD)
+        val look = Look(
+            regular = typeface, bold = bold, ink = argb(args["text"]), fill = argb(args["fill"]),
+            onFill = argb(args["onFill"]), label = args["label"] as? String ?: "",
+        )
         val doc = PdfDocument()
-        var pageNumber = 0
+        val cursor = Cursor(doc)
         for (page in pages) {
-            val text = spanned(page as? List<*> ?: continue, width, fill, onFill, label, paint)
-            if (text.isEmpty()) continue
-            val layout = StaticLayout.Builder.obtain(text, 0, text.length, paint, width)
-                .setTextDirection(TextDirectionHeuristics.FIRSTSTRONG_RTL)
-                .setLineSpacing(4f, 1f)
-                .setIncludePad(false)
-                .build()
-            // One scanned page may need several PDF pages: cut between lines.
-            var line = 0
-            while (line < layout.lineCount) {
-                val top = layout.getLineTop(line)
-                var last = line
-                while (last + 1 < layout.lineCount && layout.getLineBottom(last + 1) - top <= height) last++
-                val pdfPage = doc.startPage(PdfDocument.PageInfo.Builder(PAGE_W, PAGE_H, ++pageNumber).create())
-                val canvas = pdfPage.canvas
-                canvas.save()
-                canvas.translate(MARGIN_X, MARGIN_Y - top)
-                canvas.clipRect(0f, top.toFloat(), width.toFloat(), layout.getLineBottom(last).toFloat())
-                layout.draw(canvas)
-                canvas.restore()
-                doc.finishPage(pdfPage)
-                line = last + 1
+            val blocks = (page as? List<*>)?.mapNotNull { it as? Map<*, *> } ?: continue
+            if (blocks.isEmpty()) continue
+            cursor.newPage()
+            var i = 0
+            while (i < blocks.size) {
+                val table = blocks[i]["table"] as? Number
+                if (table != null) {
+                    var j = i
+                    while (j < blocks.size && (blocks[j]["table"] as? Number)?.toInt() == table.toInt()) j++
+                    drawTable(blocks.subList(i, j), look, cursor)
+                    i = j
+                } else {
+                    drawParagraph(blocks[i], look, cursor)
+                    i++
+                }
             }
         }
-        if (pageNumber == 0) doc.finishPage(doc.startPage(PdfDocument.PageInfo.Builder(PAGE_W, PAGE_H, 1).create()))
+        cursor.finish()
+        if (cursor.pageNumber == 0) doc.finishPage(doc.startPage(PdfDocument.PageInfo.Builder(PAGE_W, PAGE_H, 1).create()))
         val out = ByteArrayOutputStream()
         doc.writeTo(out)
         doc.close()
         return out.toByteArray()
     }
 
+    private class Look(
+        val regular: Typeface, val bold: Typeface, val ink: Int, val fill: Int, val onFill: Int, val label: String,
+    )
+
+    /** The current PDF page and how far down it is filled. */
+    private class Cursor(val doc: PdfDocument) {
+        var page: PdfDocument.Page? = null
+        var pageNumber = 0
+        var y = MARGIN_Y
+
+        val canvas: Canvas get() = page!!.canvas
+
+        fun newPage() {
+            finish()
+            page = doc.startPage(PdfDocument.PageInfo.Builder(PAGE_W, PAGE_H, ++pageNumber).create())
+            y = MARGIN_Y
+        }
+
+        fun finish() {
+            page?.let { doc.finishPage(it) }
+            page = null
+        }
+
+        /** A new page when [h] does not fit, unless this page is still empty. */
+        fun reserve(h: Float) {
+            if (y + h > PAGE_H - MARGIN_Y && y > MARGIN_Y) newPage()
+        }
+    }
+
+    private val textWidth get() = PAGE_W - 2 * MARGIN_X
+
+    private fun space(block: Map<*, *>): Float =
+        ((block["space"] as? Number)?.toFloat() ?: 0f).coerceIn(0f, 3f) * FONT_SIZE * 0.6f
+
+    private fun layout(block: Map<*, *>, look: Look, width: Int, alignOverride: String? = null): StaticLayout {
+        val rtl = block["rtl"] as? Boolean ?: true
+        val heading = block["heading"] as? Boolean ?: false
+        val size = ((block["size"] as? Number)?.toFloat() ?: 1f).coerceIn(0.85f, 1.8f)
+        val paint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+            typeface = if (heading) look.bold else look.regular
+            textSize = FONT_SIZE * size
+            color = look.ink
+        }
+        val text = spanned(block, width, look.fill, look.onFill, look.label, paint)
+        // NORMAL is the text's start side; OPPOSITE its end.
+        val align = when (alignOverride ?: block["align"] as? String) {
+            "center" -> Layout.Alignment.ALIGN_CENTER
+            "end" -> Layout.Alignment.ALIGN_OPPOSITE
+            else -> Layout.Alignment.ALIGN_NORMAL
+        }
+        val b = StaticLayout.Builder.obtain(text, 0, text.length, paint, max(1, width))
+            .setTextDirection(if (rtl) TextDirectionHeuristics.RTL else TextDirectionHeuristics.LTR)
+            .setAlignment(align)
+            .setLineSpacing(4f, 1f)
+            .setIncludePad(false)
+        if ((block["align"] as? String) == "justify" && alignOverride == null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            b.setJustificationMode(android.text.Layout.JUSTIFICATION_MODE_INTER_WORD)
+        }
+        return b.build()
+    }
+
+    private fun drawParagraph(block: Map<*, *>, look: Look, cursor: Cursor) {
+        val rtl = block["rtl"] as? Boolean ?: true
+        val indent = ((block["indent"] as? Number)?.toFloat() ?: 0f).coerceIn(0f, 0.6f) * textWidth
+        val width = (textWidth - indent).toInt()
+        val x = if (rtl) MARGIN_X else MARGIN_X + indent
+        if (cursor.y > MARGIN_Y) cursor.y += space(block)
+        val l = layout(block, look, width)
+        val pageH = PAGE_H - 2 * MARGIN_Y
+        if (l.height <= pageH) {
+            cursor.reserve(l.height.toFloat())
+            cursor.canvas.save()
+            cursor.canvas.translate(x, cursor.y)
+            l.draw(cursor.canvas)
+            cursor.canvas.restore()
+            cursor.y += l.height + 8f
+            return
+        }
+        // Longer than a page: cut between lines.
+        var line = 0
+        while (line < l.lineCount) {
+            val top = l.getLineTop(line)
+            val room = PAGE_H - MARGIN_Y - cursor.y
+            var last = line
+            while (last + 1 < l.lineCount && l.getLineBottom(last + 1) - top <= room) last++
+            cursor.canvas.save()
+            cursor.canvas.translate(x, cursor.y - top)
+            cursor.canvas.clipRect(0f, top.toFloat(), width.toFloat(), l.getLineBottom(last).toFloat())
+            l.draw(cursor.canvas)
+            cursor.canvas.restore()
+            cursor.y += (l.getLineBottom(last) - top).toFloat()
+            line = last + 1
+            if (line < l.lineCount) cursor.newPage()
+        }
+        cursor.y += 8f
+    }
+
+    private fun drawTable(cells: List<Map<*, *>>, look: Look, cursor: Cursor) {
+        val rows = (cells.mapNotNull { (it["row"] as? Number)?.toInt() }.maxOrNull() ?: 0) + 1
+        val cols = (cells.mapNotNull { (it["col"] as? Number)?.toInt() }.maxOrNull() ?: 0) + 1
+        val rtl = cells.first()["rtl"] as? Boolean ?: true
+        val ruled = rows > 1
+        val colW = textWidth / cols
+        val pad = 5f
+        val rule = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = (look.ink and 0x00FFFFFF) or (0x73 shl 24)
+            style = Paint.Style.STROKE
+            strokeWidth = 0.5f
+        }
+        if (cursor.y > MARGIN_Y) cursor.y += space(cells.first())
+        for (r in 0 until rows) {
+            val layouts = HashMap<Int, StaticLayout>()
+            var tallest = FONT_SIZE * 1.4f
+            for (c in 0 until cols) {
+                val cell = cells.firstOrNull { (it["row"] as? Number)?.toInt() == r && (it["col"] as? Number)?.toInt() == c } ?: continue
+                val override = if (ruled) null else if (c == 0) "start" else if (c == cols - 1) "end" else "center"
+                // Cells read in the page's direction even when their own text is Latin.
+                val l = layout(HashMap<Any?, Any?>(cell).apply { put("rtl", rtl) }, look, (colW - pad * 2).toInt(), override)
+                layouts[c] = l
+                tallest = max(tallest, l.height.toFloat())
+            }
+            val rowH = tallest + pad * 2
+            cursor.reserve(rowH)
+            for (c in 0 until cols) {
+                // Column 0 is the start side: the right edge for Arabic.
+                val x = if (rtl) PAGE_W - MARGIN_X - (c + 1) * colW else MARGIN_X + c * colW
+                if (ruled) cursor.canvas.drawRect(x, cursor.y, x + colW, cursor.y + rowH, rule)
+                val l = layouts[c] ?: continue
+                cursor.canvas.save()
+                cursor.canvas.translate(x + pad, cursor.y + pad)
+                l.draw(cursor.canvas)
+                cursor.canvas.restore()
+            }
+            cursor.y += rowH
+        }
+        cursor.y += 8f
+    }
+
     private fun spanned(
-        blocks: List<*>, width: Int, fill: Int, onFill: Int, label: String, paint: TextPaint,
+        block: Map<*, *>, width: Int, fill: Int, onFill: Int, label: String, paint: TextPaint,
     ): SpannableStringBuilder {
         val out = SpannableStringBuilder()
-        for (block in blocks) {
-            val map = block as? Map<*, *> ?: continue
-            val rtl = map["rtl"] as? Boolean ?: true
-            // A direction mark first, so a paragraph that starts with a Latin word or a
-            // number still lays out in its own direction.
-            out.append(if (rtl) '\u200F' else '\u200E')
-            for (segment in map["segments"] as? List<*> ?: emptyList<Any>()) {
-                val s = segment as? Map<*, *> ?: continue
-                val text = s["text"] as? String
-                val redacted = s["redacted"] as? String
-                if (text != null) {
-                    out.append(text).append(' ')
-                } else if (redacted != null) {
-                    // One placeholder character, replaced by the bar; never document text.
-                    val at = out.length
-                    out.append('￼')
-                    val whole = redacted == "paragraph"
-                    out.setSpan(
-                        BarSpan(if (whole) width.toFloat() else 36f, fill, onFill, if (whole) label else null, paint),
-                        at, at + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
-                    )
-                    out.append(' ')
-                }
+        val rtl = block["rtl"] as? Boolean ?: true
+        // A direction mark first, so a paragraph that starts with a Latin word or a
+        // number still lays out in its own direction.
+        out.append(if (rtl) '\u200F' else '\u200E')
+        for (segment in block["segments"] as? List<*> ?: emptyList<Any>()) {
+            val s = segment as? Map<*, *> ?: continue
+            val text = s["text"] as? String
+            val redacted = s["redacted"] as? String
+            if (out.length > 1) out.append(' ')
+            if (text != null) {
+                out.append(text)
+            } else if (redacted != null) {
+                // One placeholder character, replaced by the bar; never document text.
+                val at = out.length
+                out.append('\uFFFC')
+                val whole = redacted == "paragraph"
+                out.setSpan(
+                    BarSpan(if (whole) width.toFloat() else 36f, fill, onFill, if (whole) label else null, paint),
+                    at, at + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+                )
             }
-            out.append("\n\n")
         }
         return out
     }
@@ -143,9 +266,9 @@ object TextPdfRenderer {
         }
     }
 
-    private fun typeface(font: ByteArray, fallback: ByteArray?, cacheDir: File): Typeface {
+    private fun typeface(font: ByteArray, fallback: ByteArray?, cacheDir: File, name: String): Typeface {
         val dir = File(cacheDir, "qanoniah_doc_scan_fonts").apply { mkdirs() }
-        val main = File(dir, "pdf_font.ttf").apply { writeBytes(font) }
+        val main = File(dir, "$name.ttf").apply { writeBytes(font) }
         val base = Typeface.createFromFile(main)
         if (fallback == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return base
         val latin = File(dir, "pdf_font_fallback.ttf").apply { writeBytes(fallback) }

@@ -16,6 +16,7 @@ import Vision
 public class QanoniahDocScanPlugin: NSObject, FlutterPlugin {
   private let recognitionQueue = DispatchQueue(label: "qanoniah_doc_scan.recognition", qos: .userInitiated)
   private let frameQueue = DispatchQueue(label: "qanoniah_doc_scan.frames", qos: .userInitiated)
+  private let prepQueue = DispatchQueue(label: "qanoniah_doc_scan.prep", qos: .userInitiated)
   private var tesseract: [String: OpaquePointer] = [:]
 
   public static func register(with registrar: FlutterPluginRegistrar) {
@@ -25,6 +26,8 @@ public class QanoniahDocScanPlugin: NSObject, FlutterPlugin {
     registrar.addMethodCallDelegate(plugin, channel: channel)
     let pdf = FlutterMethodChannel(name: "qanoniah_doc_scan/pdf", binaryMessenger: registrar.messenger())
     registrar.addMethodCallDelegate(plugin, channel: pdf)
+    let prep = FlutterMethodChannel(name: "qanoniah_doc_scan/prep", binaryMessenger: registrar.messenger())
+    registrar.addMethodCallDelegate(plugin, channel: prep)
   }
 
   public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
@@ -46,6 +49,25 @@ public class QanoniahDocScanPlugin: NSObject, FlutterPlugin {
       frameQueue.async {
         let corners = Self.detectRectangle(bytes: data.data, width: width, height: height)
         DispatchQueue.main.async { result(corners) }
+      }
+    case "analyzeFrame":
+      guard let data = args["bytes"] as? FlutterStandardTypedData,
+        let width = args["width"] as? Int, let height = args["height"] as? Int
+      else { return result(FlutterMethodNotImplemented) }
+      frameQueue.async {
+        let analysis = PagePrep.analyzeFrame(bytes: data.data, width: width, height: height)
+        DispatchQueue.main.async { result(analysis) }
+      }
+    case "preparePage":
+      prepQueue.async {
+        let out = autoreleasepool { PagePrep.prepare(args) }
+        DispatchQueue.main.async {
+          if let out = out {
+            result(out)
+          } else {
+            result(FlutterError(code: "prepare_failed", message: nil, details: nil))
+          }
+        }
       }
     case "detectRectangleInPhoto":
       guard let path = args["path"] as? String else { return result(FlutterMethodNotImplemented) }
@@ -119,7 +141,7 @@ public class QanoniahDocScanPlugin: NSObject, FlutterPlugin {
       }
       if !words.isEmpty { blocks.append(words) }
     }
-    return ["blocks": blocks, "paragraphs": false]
+    return ["blocks": blocks, "paragraphs": false, "width": image.width, "height": image.height]
   }
 
   private func engine(lang: String, tessdata: String) -> OpaquePointer? {
@@ -178,7 +200,7 @@ public class QanoniahDocScanPlugin: NSObject, FlutterPlugin {
       if !line.isEmpty { blocks.append(line) }
     }
     TessBaseAPIClear(api)
-    return ["blocks": blocks, "paragraphs": false]
+    return ["blocks": blocks, "paragraphs": false, "width": width, "height": height]
   }
 
   // MARK: Page edges
@@ -193,7 +215,7 @@ public class QanoniahDocScanPlugin: NSObject, FlutterPlugin {
     let props = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any]
     let raw = (props?[kCGImagePropertyOrientation] as? UInt32) ?? 1
     let orientation = CGImagePropertyOrientation(rawValue: raw) ?? .up
-    return rectangle(in: VNImageRequestHandler(cgImage: image, orientation: orientation, options: [:]))
+    return PagePrep.page(in: VNImageRequestHandler(cgImage: image, orientation: orientation, options: [:]))
   }
 
   private static func rectangle(in handler: VNImageRequestHandler) -> [Double]? {

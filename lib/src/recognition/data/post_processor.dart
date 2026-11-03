@@ -1,16 +1,21 @@
 import 'dart:ui' show Rect;
 
 import '../../core/session/scan_session.dart';
+import 'layout_analyzer.dart';
 import 'text_recognizer.dart';
 
 /// Layer 3 of the OCR service: turns either engine's raw output into [PageText]
 /// (FR-051, research R6). Engine-independent, so the evaluation set measures
 /// engines and not formatting differences.
 class PostProcessor {
-  const PostProcessor({this.paragraphGapFactor = 1.2});
+  const PostProcessor({this.paragraphGapFactor = 1.2, this.layout = const LayoutAnalyzer()});
 
+  // TODO(unused): grouping moved to [LayoutAnalyzer]; kept for the old _group.
   /// A vertical gap larger than this many median line heights starts a paragraph.
   final double paragraphGapFactor;
+
+  /// Tables, paragraphs, alignment and spacing from the word boxes.
+  final LayoutAnalyzer layout;
 
   PageText process(RawRecognition raw, RecognitionLanguage language) {
     final List<List<Word>> lines = raw.blocks
@@ -18,12 +23,13 @@ class PostProcessor {
         .where((List<Word> words) => words.isNotEmpty)
         .map(orderLine)
         .toList();
-    final List<List<Word>> paragraphs = raw.blocksAreParagraphs ? lines : _group(lines);
     return PageText(
       language: language,
-      paragraphs: <Paragraph>[
-        for (int i = 0; i < paragraphs.length; i++) Paragraph(id: 'p$i', words: paragraphs[i]),
-      ],
+      width: raw.width,
+      height: raw.height,
+      paragraphs: raw.blocksAreParagraphs
+          ? <Paragraph>[for (int i = 0; i < lines.length; i++) Paragraph(id: 'p$i', words: lines[i])]
+          : layout.analyze(lines, rtl: language == RecognitionLanguage.ar),
     );
   }
 
@@ -54,6 +60,7 @@ class PostProcessor {
     return out;
   }
 
+  // ignore: unused_element
   List<List<Word>> _group(List<List<Word>> lines) {
     if (lines.isEmpty) return lines;
     final List<List<Word>> byTop = List<List<Word>>.of(lines)
