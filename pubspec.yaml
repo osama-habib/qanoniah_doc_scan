@@ -1,6 +1,6 @@
 name: qanoniah_doc_scan
 description: "Qanoniah document scan: capture, review, OCR, redact, build one PDF."
-version: 0.6.0
+version: 0.6.1
 homepage:
 
 environment:

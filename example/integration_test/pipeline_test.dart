@@ -47,6 +47,7 @@ void main() {
       await _loadFonts();
       const String out = String.fromEnvironment('OUT');
       final Directory dir = out.isEmpty ? await Directory.systemTemp.createTemp('pipe') : await Directory(out).create(recursive: true);
+      _logFile = File('${dir.path}/pipe.log')..writeAsStringSync('');
       final (File photo, List<Offset> truth) = await _photo(dir);
       _log('photo ${photo.lengthSync() ~/ 1024} KB, true corners ${_fmt(truth)}');
 
@@ -217,9 +218,14 @@ Future<String> _stats(File f) async {
   return '${w}x$h paper=${mean.toStringAsFixed(0)}±${math.sqrt(math.max(0, sq / n - mean * mean)).toStringAsFixed(1)}';
 }
 
+/// A copy of the log next to the artifacts: a profile build on a phone does not send
+/// `print` to the launch console, so the run is read back from the app container.
+File? _logFile;
+
 void _log(String s) {
   // ignore: avoid_print
   print('[PIPE] $s');
+  _logFile?.writeAsStringSync('[PIPE] $s\n', mode: FileMode.append, flush: true);
 }
 
 String _fmt(List<Offset> c) => c.map((Offset o) => '(${o.dx.toStringAsFixed(3)},${o.dy.toStringAsFixed(3)})').join(' ');

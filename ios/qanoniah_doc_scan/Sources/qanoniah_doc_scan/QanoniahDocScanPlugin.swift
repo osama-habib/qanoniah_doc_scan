@@ -104,6 +104,8 @@ public class QanoniahDocScanPlugin: NSObject, FlutterPlugin {
     return recognizeWithTesseract(image, lang: lang == "ar" ? "ara" : "eng", tessdata: tessdata)
   }
 
+  private static let wordRun = try! NSRegularExpression(pattern: "\\S+")
+
   /// Nil when this device's Vision cannot read [language].
   private static func recognizeWithVision(_ image: CGImage, language: String) -> [String: Any]? {
     let request = VNRecognizeTextRequest()
@@ -124,11 +126,14 @@ public class QanoniahDocScanPlugin: NSObject, FlutterPlugin {
       guard let candidate = observation.topCandidates(1).first else { continue }
       let text = candidate.string
       var words: [[String: Any]] = []
-      text.enumerateSubstrings(in: text.startIndex..<text.endIndex, options: .byWords) {
-        word, range, _, _ in
-        guard let word = word, !word.isEmpty,
+      // Words are whitespace runs, not `.byWords`: that skips punctuation, which
+      // dropped every comma and full stop from the text.
+      let whole = NSRange(text.startIndex..<text.endIndex, in: text)
+      for match in wordRun.matches(in: text, range: whole) {
+        guard let range = Range(match.range, in: text),
           let box = (try? candidate.boundingBox(for: range))??.boundingBox
-        else { return }
+        else { continue }
+        let word = String(text[range])
         // Vision boxes are normalized with the origin at the bottom left.
         words.append([
           "text": word,

@@ -1,3 +1,12 @@
+## 0.6.1
+
+* iOS OCR keeps punctuation: words are split on whitespace instead of
+  `.byWords`, which dropped every comma and full stop (Arabic «،» and «.» too).
+  Checked on an iPhone 13 Pro Max: native page prep 85 to 161 ms, recognition
+  0.73 s, text PDF 77 ms.
+* The example's pipeline test also writes its log next to its artifacts, since a
+  profile build on a phone does not send `print` to the launch console.
+
 ## 0.6.0
 
 Scanner-grade capture and layout-aware OCR.
