@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:flutter/gestures.dart';
@@ -11,6 +12,7 @@ import '../../core/doc_scan_theme.dart';
 import '../../core/session/document_edits.dart';
 import '../../core/session/scan_session.dart';
 import '../manager/preview_cubit.dart';
+import 'positional_sheet.dart';
 
 /// One page's recognized text as a white sheet (stories 6 and 8, design
 /// `scanTextMode`).
@@ -34,6 +36,13 @@ class TextPageView extends StatelessWidget {
     final PreviewState st = context.watch<PreviewCubit>().state;
     final RecognitionState r = page.recognition;
     final TextStyle body = t.bodyStyle.sized(14, 24).copyWith(color: t.inverseSurface, fontWeight: FontWeight.w600);
+    if (r is RecognitionDone && r.text.width > 0) {
+      return Container(
+        width: double.infinity,
+        decoration: BoxDecoration(color: t.surface, boxShadow: pageShadow(t)),
+        child: _sheet(context, r.text, st, t, body),
+      );
+    }
     final Widget content;
     if (r is! RecognitionDone) {
       content = Text(
@@ -109,6 +118,54 @@ class TextPageView extends StatelessWidget {
       padding: ScanMetrics.textPage,
       decoration: BoxDecoration(color: t.surface, boxShadow: pageShadow(t)),
       child: content,
+    );
+  }
+
+  /// The page as printed (revised 2026-11-04): its background with every word
+  /// drawn back in place. Same selection, hiding and editing as the flowing text.
+  Widget _sheet(BuildContext context, PageText text, PreviewState st, DocScanTheme t, TextStyle body) {
+    final PreviewCubit cubit = context.read<PreviewCubit>();
+    final WordSelection? sel = st.selection;
+    final File? bg = st.backgrounds[page.id];
+    return PositionalSheet(
+      text: text,
+      background: bg == null ? null : FileImage(bg),
+      style: body.copyWith(fontWeight: FontWeight.w400),
+      paper: t.surface,
+      selection: t.frameDetected.withValues(alpha: 0.28),
+      redaction: t.inverseSurface,
+      lookOf: (Paragraph p, int i) {
+        final ParagraphKey key = (page.id, p.id);
+        if (st.edits.isParagraphRedacted(key) || st.edits.isWordRedacted(key, i)) return WordLook.hidden;
+        final bool here = sel != null && sel.pageId == page.id && sel.paragraphId == p.id;
+        return here && i >= sel.start && i <= sel.end ? WordLook.selected : WordLook.normal;
+      },
+      replacementOf: (Paragraph p) => st.edits.replacements[(page.id, p.id)],
+      onTapWord: (Paragraph p, int i) {
+        final bool here = sel != null && sel.pageId == page.id && sel.paragraphId == p.id;
+        if (here && sel.start == i && sel.end == i) return cubit.select(null);
+        if (here) {
+          final int a = i < sel.start ? i : sel.start;
+          final int b = i > sel.end ? i : sel.end;
+          return cubit.select(WordSelection(pageId: page.id, paragraphId: p.id, start: a, end: b));
+        }
+        cubit.select(WordSelection(pageId: page.id, paragraphId: p.id, start: i, end: i));
+      },
+      editorFor: (Paragraph p, double fontSize) => editing != p.id
+          ? null
+          : ColoredBox(
+              color: t.surface,
+              child: _ParagraphEditor(
+                initial: st.edits.textOf(page.id, p),
+                dir: p.mostlyLatin ? TextDirection.ltr : TextDirection.rtl,
+                style: body.copyWith(fontSize: fontSize < (body.fontSize ?? 0) ? body.fontSize : fontSize),
+                align: TextAlign.start,
+                onDone: (String value) {
+                  cubit.editParagraph(page.id, p, value);
+                  onEditDone?.call();
+                },
+              ),
+            ),
     );
   }
 }

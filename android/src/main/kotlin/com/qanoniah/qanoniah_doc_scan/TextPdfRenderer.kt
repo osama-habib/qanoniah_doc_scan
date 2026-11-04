@@ -70,6 +70,114 @@ object TextPdfRenderer {
         return out.toByteArray()
     }
 
+    /**
+     * The pages as printed (revised 2026-11-04): each PDF page has its scan's size;
+     * the background (the scan without the words it erased) fills it, and every word
+     * is drawn as text on its printed baseline, at its printed size, scaled across to
+     * its printed width. Coordinates arrive in points.
+     */
+    fun renderPlaced(args: Map<*, *>, cacheDir: File): ByteArray? {
+        val fontBytes = args["font"] as? ByteArray ?: return null
+        val pages = (args["pages"] as? List<*>)?.mapNotNull { it as? Map<*, *> } ?: return null
+        val regular = typeface(fontBytes, args["fontFallback"] as? ByteArray, cacheDir, "pdf_font")
+        val bold = (args["fontBold"] as? ByteArray)?.let { typeface(it, args["fontFallback"] as? ByteArray, cacheDir, "pdf_font_bold") }
+            ?: Typeface.create(regular, Typeface.BOLD)
+        val ink = argb(args["text"])
+        val fill = argb(args["fill"])
+        val onFill = argb(args["onFill"])
+        val label = args["label"] as? String ?: ""
+        val doc = PdfDocument()
+        var number = 0
+        for (page in pages) {
+            val w = num(page["w"]).toInt().coerceAtLeast(1)
+            val h = num(page["h"]).toInt().coerceAtLeast(1)
+            val pdfPage = doc.startPage(PdfDocument.PageInfo.Builder(w, h, ++number).create())
+            val canvas = pdfPage.canvas
+            (page["bg"] as? ByteArray)?.let { bytes ->
+                android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.let { bmp ->
+                    canvas.drawBitmap(bmp, null, RectF(0f, 0f, w.toFloat(), h.toFloat()), Paint(Paint.FILTER_BITMAP_FLAG))
+                    bmp.recycle()
+                }
+            }
+            for (item in (page["items"] as? List<*>)?.mapNotNull { it as? Map<*, *> } ?: emptyList()) {
+                val box = RectF(num(item["l"]), num(item["t"]), num(item["r"]), num(item["b"]))
+                when (item["k"]) {
+                    "word" -> {
+                        val text = item["text"] as? String ?: continue
+                        if (text.isEmpty()) continue
+                        val paint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+                            typeface = if (item["bold"] == true) bold else regular
+                            textSize = max(1f, num(item["em"]))
+                            color = ink
+                        }
+                        val rtl = item["rtl"] as? Boolean ?: true
+                        // One line, as wide as the text (a wider layout would wrap nothing but
+                        // push right-to-left text far from 0).
+                        val natural = kotlin.math.ceil(paint.measureText(text)).toInt() + 2
+                        val layout = staticLayout(text, paint, natural, rtl, Layout.Alignment.ALIGN_NORMAL)
+                        val width = layout.getLineWidth(0)
+                        if (width <= 0f) continue
+                        val sx = (box.width() / width).coerceIn(0.6f, 1.6f)
+                        val lineLeft = layout.getLineLeft(0)
+                        canvas.save()
+                        canvas.translate(box.centerX() - width * sx / 2, num(item["base"]))
+                        canvas.scale(sx, 1f)
+                        // The layout's own origin: its first line's left edge, its baseline at 0.
+                        canvas.translate(-lineLeft, -layout.getLineBaseline(0).toFloat())
+                        layout.draw(canvas)
+                        canvas.restore()
+                    }
+                    "bar" -> {
+                        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = fill }
+                        val r = minOf(3f, box.height() / 4)
+                        canvas.drawRoundRect(box, r, r, paint)
+                        if (item["paragraph"] == true && box.height() >= 14f) {
+                            val tp = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+                                typeface = regular
+                                textSize = minOf(11f, box.height() * 0.6f)
+                                color = onFill
+                            }
+                            val l = staticLayout(label, tp, max(1, (box.width() - 16).toInt()), true, Layout.Alignment.ALIGN_NORMAL)
+                            canvas.save()
+                            canvas.translate(box.left + 8, box.top + (box.height() - l.height) / 2)
+                            l.draw(canvas)
+                            canvas.restore()
+                        }
+                    }
+                    "flow" -> {
+                        val text = item["text"] as? String ?: continue
+                        val paint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+                            typeface = regular
+                            textSize = max(1f, num(item["em"]))
+                            color = ink
+                        }
+                        val rtl = item["rtl"] as? Boolean ?: true
+                        val l = staticLayout(text, paint, max(1, box.width().toInt()), rtl, Layout.Alignment.ALIGN_NORMAL)
+                        canvas.save()
+                        canvas.translate(box.left, box.top)
+                        l.draw(canvas)
+                        canvas.restore()
+                    }
+                }
+            }
+            doc.finishPage(pdfPage)
+        }
+        if (number == 0) doc.finishPage(doc.startPage(PdfDocument.PageInfo.Builder(PAGE_W, PAGE_H, 1).create()))
+        val out = ByteArrayOutputStream()
+        doc.writeTo(out)
+        doc.close()
+        return out.toByteArray()
+    }
+
+    private fun num(v: Any?): Float = (v as? Number)?.toFloat() ?: 0f
+
+    private fun staticLayout(text: CharSequence, paint: TextPaint, width: Int, rtl: Boolean, align: Layout.Alignment): StaticLayout =
+        StaticLayout.Builder.obtain(text, 0, text.length, paint, width)
+            .setAlignment(align)
+            .setTextDirection(if (rtl) TextDirectionHeuristics.RTL else TextDirectionHeuristics.LTR)
+            .setIncludePad(false)
+            .build()
+
     private class Look(
         val regular: Typeface, val bold: Typeface, val ink: Int, val fill: Int, val onFill: Int, val label: String,
     )

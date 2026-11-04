@@ -15,24 +15,70 @@ import 'package:qanoniah_doc_scan/src/page_prep/data/page_preparer.dart';
 const TextStyle _s = TextStyle(fontSize: 14);
 
 const DocScanIcons testIcons = DocScanIcons(
-  close: 'i.svg', capture: 'i.svg', autoMode: 'i.svg', manualMode: 'i.svg', addPage: 'i.svg',
-  retake: 'i.svg', delete: 'i.svg', crop: 'i.svg', filters: 'i.svg', redact: 'i.svg',
-  reveal: 'i.svg', edit: 'i.svg', document: 'i.svg', back: 'i.svg', done: 'i.svg', photoView: 'i.svg',
-  undo: 'i.svg', dragHandle: 'i.svg', pages: 'i.svg', search: 'i.svg', chevronUp: 'i.svg', chevronDown: 'i.svg', pdf: 'i.svg',
+  close: 'i.svg',
+  capture: 'i.svg',
+  autoMode: 'i.svg',
+  manualMode: 'i.svg',
+  addPage: 'i.svg',
+  retake: 'i.svg',
+  delete: 'i.svg',
+  crop: 'i.svg',
+  filters: 'i.svg',
+  redact: 'i.svg',
+  reveal: 'i.svg',
+  edit: 'i.svg',
+  document: 'i.svg',
+  back: 'i.svg',
+  done: 'i.svg',
+  photoView: 'i.svg',
+  undo: 'i.svg',
+  dragHandle: 'i.svg',
+  pages: 'i.svg',
+  search: 'i.svg',
+  chevronUp: 'i.svg',
+  chevronDown: 'i.svg',
+  pdf: 'i.svg',
 );
 
 const DocScanTheme testTheme = DocScanTheme(
-  cameraSurface: Color(0xff111111), onCameraSurface: Color(0xffffffff), onCameraSurfaceMuted: Color(0xffcccccc),
-  frameSearching: Color(0xffcccccc), frameDetected: Color(0xff3366ff), captureFlash: Color(0xffffffff),
-  surface: Color(0xffffffff), surfaceSecondary: Color(0xfff5f5f5), onSurface: Color(0xff222222),
-  onSurfaceMuted: Color(0xff777777), border: Color(0xffdddddd), primary: Color(0xff0a1c6d),
-  onPrimary: Color(0xffffffff), redactionFill: Color(0xff222222), onRedactionFill: Color(0xffffffff),
-  danger: Color(0xffdc2626), scrim: Color(0x99000000),
-  canvas: Color(0xffe5e7eb), surfaceTertiary: Color(0xfff3f4f6), inverseSurface: Color(0xff111827),
-  titleStyle: _s, bodyStyle: _s, bodyStrongStyle: _s, captionStyle: _s, buttonStyle: _s,
-  spaceXs: 4, spaceSm: 8, spaceMd: 12, spaceLg: 16, spaceXl: 32,
-  radiusSm: 12, radiusMd: 12, radiusLg: 20, radiusSheet: 20,
-  iconSize: 24, thumbnailSize: 48, frameStrokeWidth: 2, icons: testIcons,
+  cameraSurface: Color(0xff111111),
+  onCameraSurface: Color(0xffffffff),
+  onCameraSurfaceMuted: Color(0xffcccccc),
+  frameSearching: Color(0xffcccccc),
+  frameDetected: Color(0xff3366ff),
+  captureFlash: Color(0xffffffff),
+  surface: Color(0xffffffff),
+  surfaceSecondary: Color(0xfff5f5f5),
+  onSurface: Color(0xff222222),
+  onSurfaceMuted: Color(0xff777777),
+  border: Color(0xffdddddd),
+  primary: Color(0xff0a1c6d),
+  onPrimary: Color(0xffffffff),
+  redactionFill: Color(0xff222222),
+  onRedactionFill: Color(0xffffffff),
+  danger: Color(0xffdc2626),
+  scrim: Color(0x99000000),
+  canvas: Color(0xffe5e7eb),
+  surfaceTertiary: Color(0xfff3f4f6),
+  inverseSurface: Color(0xff111827),
+  titleStyle: _s,
+  bodyStyle: _s,
+  bodyStrongStyle: _s,
+  captionStyle: _s,
+  buttonStyle: _s,
+  spaceXs: 4,
+  spaceSm: 8,
+  spaceMd: 12,
+  spaceLg: 16,
+  spaceXl: 32,
+  radiusSm: 12,
+  radiusMd: 12,
+  radiusLg: 20,
+  radiusSheet: 20,
+  iconSize: 24,
+  thumbnailSize: 48,
+  frameStrokeWidth: 2,
+  icons: testIcons,
 );
 
 /// Serves a tiny SVG for any asset key, so icons render without bundled files.
@@ -54,7 +100,12 @@ Widget testApp(Widget home) => DefaultAssetBundle(
     supportedLocales: const <Locale>[Locale('ar')],
     localizationsDelegates: GlobalMaterialLocalizations.delegates,
     theme: ThemeData(extensions: const <ThemeExtension<dynamic>>[testTheme]),
-    builder: (BuildContext context, Widget? child) => Directionality(textDirection: TextDirection.rtl, child: child!),
+    // Reduced motion: flow tests mix real-time waits with fake-clock frames,
+    // which a ticker started between them cannot follow.
+    builder: (BuildContext context, Widget? child) => MediaQuery(
+      data: MediaQuery.of(context).copyWith(disableAnimations: true),
+      child: Directionality(textDirection: TextDirection.rtl, child: child!),
+    ),
     home: home,
   ),
 );
@@ -85,6 +136,7 @@ class FakePagePreparer implements PagePreparer {
   int calls = 0;
   final List<Set<PageFilter>> filters = <Set<PageFilter>>[];
   final List<Quad> corners = <Quad>[];
+  final List<int> turns = <int>[];
 
   @override
   int get maxLongEdge => 2200;
@@ -102,8 +154,11 @@ class FakePagePreparer implements PagePreparer {
     required Set<PageFilter> filters,
     required File prepared,
     required File ocrInput,
+    int turns = 0,
+    int? longEdge,
   }) async {
     calls++;
+    this.turns.add(turns);
     this.filters.add(filters);
     this.corners.add(corners);
     await raw.copy(prepared.path);

@@ -40,6 +40,14 @@ object PagePrep {
         val photo = decodeUpright(raw, maxLong * 2) ?: return null
         var page = warp(photo, quad, maxLong)
         if (page !== photo) photo.recycle()
+        // Upright: clockwise quarter turns.
+        val turns = ((args["turns"] as? Number)?.toInt() ?: 0).mod(4)
+        if (turns != 0) {
+            val m = android.graphics.Matrix().apply { postRotate(90f * turns) }
+            val turned = Bitmap.createBitmap(page, 0, 0, page.width, page.height, m, true)
+            if (turned !== page) page.recycle()
+            page = turned
+        }
 
         val flat = flattened(page)
         var visible = page

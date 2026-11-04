@@ -78,6 +78,173 @@ enum TextPdfRenderer {
     }
   }
 
+  // MARK: Pages as printed
+
+  /// The pages as printed (revised 2026-11-04): each PDF page has its scan's
+  /// size; the background (the scan without the words it erased) fills it, and
+  /// every word is drawn as text on its printed baseline, at its printed size,
+  /// scaled across to its printed width. Coordinates arrive in points.
+  static func renderPlaced(_ args: [String: Any]) -> Data? {
+    guard let fontData = (args["font"] as? FlutterStandardTypedData)?.data,
+      let fallbackData = (args["fontFallback"] as? FlutterStandardTypedData)?.data,
+      let pages = args["pages"] as? [[String: Any]],
+      let baseFace = face(fontData)
+    else { return nil }
+    let fallbackFace = face(fallbackData)
+    let boldFace = ((args["fontBold"] as? FlutterStandardTypedData)?.data).flatMap(face) ?? baseFace
+    // Fonts are made from the host's bytes, never looked up by name: iOS has its
+    // own Noto Sans Arabic under the same PostScript name, with other glyphs.
+    func font(_ face: CTFontDescriptor, _ size: CGFloat) -> UIFont {
+      var attributes: [CFString: Any] = [:]
+      if let fallbackFace = fallbackFace { attributes[kCTFontCascadeListAttribute] = [fallbackFace] }
+      let d = CTFontDescriptorCreateCopyWithAttributes(face, attributes as CFDictionary)
+      return CTFontCreateWithFontDescriptor(d, size, nil) as UIFont
+    }
+    let ink = color(args["text"])
+    let fill = color(args["fill"])
+    let onFill = color(args["onFill"])
+    let label = args["label"] as? String ?? ""
+    let first = pages.first.map { CGRect(x: 0, y: 0, width: num($0["w"]), height: num($0["h"])) } ?? pageRect
+    let renderer = UIGraphicsPDFRenderer(bounds: first)
+    return renderer.pdfData { context in
+      if pages.isEmpty { context.beginPage() }
+      for page in pages {
+        let bounds = CGRect(x: 0, y: 0, width: num(page["w"]), height: num(page["h"]))
+        context.beginPage(withBounds: bounds, pageInfo: [:])
+        if let bg = (page["bg"] as? FlutterStandardTypedData)?.data, let image = UIImage(data: bg) {
+          image.draw(in: bounds)
+        }
+        let cg = context.cgContext
+        for item in page["items"] as? [[String: Any]] ?? [] {
+          let box = CGRect(
+            x: num(item["l"]), y: num(item["t"]),
+            width: num(item["r"]) - num(item["l"]), height: num(item["b"]) - num(item["t"]))
+          switch item["k"] as? String {
+          case "word":
+            guard let text = item["text"] as? String, !text.isEmpty else { continue }
+            let bold = item["bold"] as? Bool ?? false
+            let f = font(bold ? boldFace : baseFace, CGFloat(max(1, num(item["em"]))))
+            let style = NSMutableParagraphStyle()
+            let rtl = item["rtl"] as? Bool ?? true
+            style.baseWritingDirection = rtl ? .rightToLeft : .leftToRight
+            let line = CTLineCreateWithAttributedString(
+              NSAttributedString(
+                string: text, attributes: [.font: f, .foregroundColor: ink, .paragraphStyle: style]))
+            let width = CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil))
+            guard width > 0 else { continue }
+            let sx = min(max(box.width / width, 0.6), 1.6)
+            let baseline = CGFloat(num(item["base"]))
+            cg.saveGState()
+            // UIKit's PDF context is flipped; CoreText draws up from the baseline.
+            cg.translateBy(x: box.midX - width * sx / 2, y: baseline)
+            cg.scaleBy(x: sx, y: 1)
+            cg.textMatrix = CGAffineTransform(scaleX: 1, y: -1)
+            cg.textPosition = .zero
+            drawGlyphs(line, ink, cg)
+            cg.restoreGState()
+          case "bar":
+            fill.setFill()
+            UIBezierPath(roundedRect: box, cornerRadius: min(3, box.height / 4)).fill()
+            if item["paragraph"] as? Bool ?? false, box.height >= 14 {
+              let style = NSMutableParagraphStyle()
+              style.alignment = .right
+              style.baseWritingDirection = .rightToLeft
+              NSAttributedString(
+                string: label,
+                attributes: [.font: font(baseFace, min(11, box.height * 0.6)), .foregroundColor: onFill, .paragraphStyle: style]
+              ).draw(in: box.insetBy(dx: 8, dy: max(1, (box.height - 14) / 2)))
+            }
+          case "flow":
+            guard let text = item["text"] as? String else { continue }
+            let style = NSMutableParagraphStyle()
+            let rtl = item["rtl"] as? Bool ?? true
+            style.baseWritingDirection = rtl ? .rightToLeft : .leftToRight
+            style.alignment = rtl ? .right : .left
+            NSAttributedString(
+              string: text,
+              attributes: [.font: font(baseFace, CGFloat(max(1, num(item["em"])))), .foregroundColor: ink, .paragraphStyle: style]
+            ).draw(
+              with: CGRect(x: box.minX, y: box.minY, width: box.width, height: bounds.height - box.minY),
+              options: [.usesLineFragmentOrigin, .usesFontLeading], context: nil)
+          default:
+            continue
+          }
+        }
+      }
+    }
+  }
+
+  private static func num(_ v: Any?) -> CGFloat { CGFloat((v as? NSNumber)?.doubleValue ?? 0) }
+
+  /// Draws the shaped line glyph by glyph at the positions CoreText gave them.
+  /// `CTLineDraw` into a PDF context loses the vertical offsets of Arabic cursive
+  /// attachment (a PDF text run carries horizontal spacing only), lifting words
+  /// that start with an initial meem, hah or feh off the line.
+  ///
+  /// Known, and as before this change: PDF readers map Noto Sans Arabic's
+  /// separate dot glyphs back to text poorly, so copied Arabic text is garbled.
+  private static func drawGlyphs(_ line: CTLine, _ ink: UIColor, _ cg: CGContext) {
+    cg.setFillColor(ink.cgColor)
+    for case let run as CTRun in CTLineGetGlyphRuns(line) as NSArray {
+      let count = CTRunGetGlyphCount(run)
+      guard count > 0,
+        let font = (CTRunGetAttributes(run) as NSDictionary)[kCTFontAttributeName]
+      else { continue }
+      var glyphs = [CGGlyph](repeating: 0, count: count)
+      var positions = [CGPoint](repeating: .zero, count: count)
+      CTRunGetGlyphs(run, CFRange(location: 0, length: count), &glyphs)
+      CTRunGetPositions(run, CFRange(location: 0, length: count), &positions)
+      CTFontDrawGlyphs(font as! CTFont, glyphs, positions, count, cg)
+    }
+  }
+
+  // TODO(unused): measured ink for centring words; superseded by drawing the
+  // glyphs at their shaped positions (2026-11-04). Kept in case a font needs it.
+  /// The line's ink, up from its baseline, as CoreText really draws it: the line
+  /// rasterized off screen and its inked rows read back. (Glyph boxes at the run
+  /// positions miss the vertical offsets of Arabic cursive attachment.)
+  private static func inkBounds(_ line: CTLine) -> CGRect {
+    var ascent: CGFloat = 0
+    var descent: CGFloat = 0
+    let width = CGFloat(CTLineGetTypographicBounds(line, &ascent, &descent, nil))
+    let scale: CGFloat = 4
+    let pad = (ascent + descent) * scale
+    let w = Int((width * scale).rounded(.up)) + 4
+    let h = Int(((ascent + descent) * scale + pad * 2).rounded(.up))
+    guard w > 4, h > 0,
+      let ctx = CGContext(
+        data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w,
+        space: CGColorSpaceCreateDeviceGray(), bitmapInfo: CGImageAlphaInfo.none.rawValue)
+    else { return .zero }
+    ctx.setFillColor(gray: 1, alpha: 1)
+    ctx.fill(CGRect(x: 0, y: 0, width: w, height: h))
+    ctx.scaleBy(x: scale, y: scale)
+    // Bitmap rows run top down; CoreText draws up from the baseline at y0.
+    let y0 = (pad + descent * scale) / scale
+    ctx.textPosition = CGPoint(x: 0, y: y0)
+    CTLineDraw(line, ctx)
+    guard let data = ctx.data else { return .zero }
+    let px = data.bindMemory(to: UInt8.self, capacity: w * h)
+    var top = -1
+    var bottom = -1
+    for row in 0..<h {
+      var inked = false
+      for x in 0..<w where px[row * w + x] < 128 {
+        inked = true
+        break
+      }
+      if inked {
+        if top < 0 { top = row }
+        bottom = row
+      }
+    }
+    guard top >= 0 else { return .zero }
+    // Row r (from the top) is y = (h - r) / scale up from the bitmap's bottom.
+    let maxY = CGFloat(h - top) / scale - y0
+    let minY = CGFloat(h - bottom - 1) / scale - y0
+    return CGRect(x: 0, y: minY, width: width, height: maxY - minY)
+  }
+
   // MARK: Layout
 
   private struct Cursor {
@@ -252,6 +419,11 @@ enum TextPdfRenderer {
         ])
       text.draw(in: CGRect(x: 12, y: 6, width: size.width - 24, height: size.height - 8))
     }
+  }
+
+  /// A font descriptor for exactly these bytes.
+  private static func face(_ data: Data) -> CTFontDescriptor? {
+    CTFontManagerCreateFontDescriptorFromData(data as CFData)
   }
 
   /// Registers font bytes for this process and returns the PostScript name.

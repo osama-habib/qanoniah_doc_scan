@@ -31,7 +31,8 @@ class DocScanIcons {
     required this.chevronUp,
     required this.chevronDown,
     required this.pdf,
-  });
+    String? rotate,
+  }) : _rotate = rotate;
 
   final String close;
   final String capture;
@@ -39,6 +40,11 @@ class DocScanIcons {
   final String manualMode;
   final String addPage;
   final String retake;
+
+  /// «تدوير» on the corner step (iconsax `rotate-left`). Null: the retake icon,
+  /// which is the same glyph in the Qanoniah set.
+  String get rotate => _rotate ?? retake;
+  final String? _rotate;
   final String delete;
   final String crop;
   final String filters;

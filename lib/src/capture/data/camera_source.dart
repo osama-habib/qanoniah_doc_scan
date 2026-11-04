@@ -12,11 +12,7 @@ import '../../core/failures.dart';
 /// One downscaled luminance frame from the live preview, for edge detection.
 @immutable
 class CameraFrame {
-  const CameraFrame({
-    required this.luminance,
-    required this.width,
-    required this.height,
-  });
+  const CameraFrame({required this.luminance, required this.width, required this.height});
 
   /// One byte per pixel, row-major, `width * height` long.
   final Uint8List luminance;
@@ -84,8 +80,10 @@ class CameraPluginSource implements CameraSource {
   Future<void> _open() async {
     final CameraController c = CameraController(
       _description!,
-      // 1080p is enough for an A4 page and keeps Dart decoding fast.
-      ResolutionPreset.veryHigh,
+      // The highest the device gives (4K on recent phones): the small print of an
+      // invoice needs it to be read, and page preparation is native now. Live
+      // frames are subsampled to [frameLongEdge] before detection either way.
+      ResolutionPreset.max,
       enableAudio: false,
       imageFormatGroup: ImageFormatGroup.yuv420,
     );
@@ -209,8 +207,7 @@ class CameraPluginSource implements CameraSource {
 
   static CameraFailure _map(CameraException e) => switch (e.code) {
     'CameraAccessDenied' || 'cameraPermission' => const CameraFailure.permissionDenied(),
-    'CameraAccessDeniedWithoutPrompt' || 'CameraAccessRestricted' =>
-      const CameraFailure.permanentlyDenied(),
+    'CameraAccessDeniedWithoutPrompt' || 'CameraAccessRestricted' => const CameraFailure.permanentlyDenied(),
     _ => const CameraFailure.unavailable(),
   };
 }

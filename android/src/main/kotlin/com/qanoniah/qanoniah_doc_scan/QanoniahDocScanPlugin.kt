@@ -32,11 +32,14 @@ class QanoniahDocScanPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
         cacheDir = binding.applicationContext.cacheDir
         pdfChannel = MethodChannel(binding.binaryMessenger, "qanoniah_doc_scan/pdf")
         pdfChannel.setMethodCallHandler { call, result ->
-            if (call.method != "renderText") return@setMethodCallHandler result.notImplemented()
+            if (call.method != "renderText" && call.method != "renderPlaced") {
+                return@setMethodCallHandler result.notImplemented()
+            }
             val args = call.arguments as? Map<*, *> ?: return@setMethodCallHandler result.notImplemented()
+            val placed = call.method == "renderPlaced"
             worker.execute {
                 val pdf = try {
-                    TextPdfRenderer.render(args, cacheDir)
+                    if (placed) TextPdfRenderer.renderPlaced(args, cacheDir) else TextPdfRenderer.render(args, cacheDir)
                 } catch (e: Exception) {
                     null
                 }

@@ -41,6 +41,17 @@ mixin _$CaptureState {
   File? get adjustFile => throw _privateConstructorUsedError;
   Quad? get adjustQuad => throw _privateConstructorUsedError;
 
+  /// The corner step's clockwise quarter turns to upright (found on capture,
+  /// changed with «تدوير»).
+  int get adjustTurns => throw _privateConstructorUsedError;
+
+  /// The page being straightened on screen: its photo, corners and turns.
+  /// [straightens] counts them, so each one plays once.
+  File? get straightenFile => throw _privateConstructorUsedError;
+  Quad? get straightenQuad => throw _privateConstructorUsedError;
+  int get straightenTurns => throw _privateConstructorUsedError;
+  int get straightens => throw _privateConstructorUsedError;
+
   /// Create a copy of CaptureState
   /// with the given fields replaced by the non-null parameter values.
   @JsonKey(includeFromJson: false, includeToJson: false)
@@ -69,10 +80,16 @@ abstract class $CaptureStateCopyWith<$Res> {
     bool replaced,
     File? adjustFile,
     Quad? adjustQuad,
+    int adjustTurns,
+    File? straightenFile,
+    Quad? straightenQuad,
+    int straightenTurns,
+    int straightens,
   });
 
   $QuadCopyWith<$Res>? get quad;
   $QuadCopyWith<$Res>? get adjustQuad;
+  $QuadCopyWith<$Res>? get straightenQuad;
 }
 
 /// @nodoc
@@ -103,6 +120,11 @@ class _$CaptureStateCopyWithImpl<$Res, $Val extends CaptureState>
     Object? replaced = null,
     Object? adjustFile = freezed,
     Object? adjustQuad = freezed,
+    Object? adjustTurns = null,
+    Object? straightenFile = freezed,
+    Object? straightenQuad = freezed,
+    Object? straightenTurns = null,
+    Object? straightens = null,
   }) {
     return _then(
       _value.copyWith(
@@ -158,6 +180,26 @@ class _$CaptureStateCopyWithImpl<$Res, $Val extends CaptureState>
                 ? _value.adjustQuad
                 : adjustQuad // ignore: cast_nullable_to_non_nullable
                       as Quad?,
+            adjustTurns: null == adjustTurns
+                ? _value.adjustTurns
+                : adjustTurns // ignore: cast_nullable_to_non_nullable
+                      as int,
+            straightenFile: freezed == straightenFile
+                ? _value.straightenFile
+                : straightenFile // ignore: cast_nullable_to_non_nullable
+                      as File?,
+            straightenQuad: freezed == straightenQuad
+                ? _value.straightenQuad
+                : straightenQuad // ignore: cast_nullable_to_non_nullable
+                      as Quad?,
+            straightenTurns: null == straightenTurns
+                ? _value.straightenTurns
+                : straightenTurns // ignore: cast_nullable_to_non_nullable
+                      as int,
+            straightens: null == straightens
+                ? _value.straightens
+                : straightens // ignore: cast_nullable_to_non_nullable
+                      as int,
           )
           as $Val,
     );
@@ -190,6 +232,20 @@ class _$CaptureStateCopyWithImpl<$Res, $Val extends CaptureState>
       return _then(_value.copyWith(adjustQuad: value) as $Val);
     });
   }
+
+  /// Create a copy of CaptureState
+  /// with the given fields replaced by the non-null parameter values.
+  @override
+  @pragma('vm:prefer-inline')
+  $QuadCopyWith<$Res>? get straightenQuad {
+    if (_value.straightenQuad == null) {
+      return null;
+    }
+
+    return $QuadCopyWith<$Res>(_value.straightenQuad!, (value) {
+      return _then(_value.copyWith(straightenQuad: value) as $Val);
+    });
+  }
 }
 
 /// @nodoc
@@ -215,12 +271,19 @@ abstract class _$$CaptureStateImplCopyWith<$Res>
     bool replaced,
     File? adjustFile,
     Quad? adjustQuad,
+    int adjustTurns,
+    File? straightenFile,
+    Quad? straightenQuad,
+    int straightenTurns,
+    int straightens,
   });
 
   @override
   $QuadCopyWith<$Res>? get quad;
   @override
   $QuadCopyWith<$Res>? get adjustQuad;
+  @override
+  $QuadCopyWith<$Res>? get straightenQuad;
 }
 
 /// @nodoc
@@ -250,6 +313,11 @@ class __$$CaptureStateImplCopyWithImpl<$Res>
     Object? replaced = null,
     Object? adjustFile = freezed,
     Object? adjustQuad = freezed,
+    Object? adjustTurns = null,
+    Object? straightenFile = freezed,
+    Object? straightenQuad = freezed,
+    Object? straightenTurns = null,
+    Object? straightens = null,
   }) {
     return _then(
       _$CaptureStateImpl(
@@ -305,6 +373,26 @@ class __$$CaptureStateImplCopyWithImpl<$Res>
             ? _value.adjustQuad
             : adjustQuad // ignore: cast_nullable_to_non_nullable
                   as Quad?,
+        adjustTurns: null == adjustTurns
+            ? _value.adjustTurns
+            : adjustTurns // ignore: cast_nullable_to_non_nullable
+                  as int,
+        straightenFile: freezed == straightenFile
+            ? _value.straightenFile
+            : straightenFile // ignore: cast_nullable_to_non_nullable
+                  as File?,
+        straightenQuad: freezed == straightenQuad
+            ? _value.straightenQuad
+            : straightenQuad // ignore: cast_nullable_to_non_nullable
+                  as Quad?,
+        straightenTurns: null == straightenTurns
+            ? _value.straightenTurns
+            : straightenTurns // ignore: cast_nullable_to_non_nullable
+                  as int,
+        straightens: null == straightens
+            ? _value.straightens
+            : straightens // ignore: cast_nullable_to_non_nullable
+                  as int,
       ),
     );
   }
@@ -327,6 +415,11 @@ class _$CaptureStateImpl implements _CaptureState {
     this.replaced = false,
     this.adjustFile,
     this.adjustQuad,
+    this.adjustTurns = 0,
+    this.straightenFile,
+    this.straightenQuad,
+    this.straightenTurns = 0,
+    this.straightens = 0,
   });
 
   @override
@@ -371,9 +464,28 @@ class _$CaptureStateImpl implements _CaptureState {
   @override
   final Quad? adjustQuad;
 
+  /// The corner step's clockwise quarter turns to upright (found on capture,
+  /// changed with «تدوير»).
+  @override
+  @JsonKey()
+  final int adjustTurns;
+
+  /// The page being straightened on screen: its photo, corners and turns.
+  /// [straightens] counts them, so each one plays once.
+  @override
+  final File? straightenFile;
+  @override
+  final Quad? straightenQuad;
+  @override
+  @JsonKey()
+  final int straightenTurns;
+  @override
+  @JsonKey()
+  final int straightens;
+
   @override
   String toString() {
-    return 'CaptureState(phase: $phase, mode: $mode, quad: $quad, hint: $hint, pageCount: $pageCount, capturing: $capturing, shots: $shots, lastThumbnail: $lastThumbnail, limitReached: $limitReached, storageFull: $storageFull, replaced: $replaced, adjustFile: $adjustFile, adjustQuad: $adjustQuad)';
+    return 'CaptureState(phase: $phase, mode: $mode, quad: $quad, hint: $hint, pageCount: $pageCount, capturing: $capturing, shots: $shots, lastThumbnail: $lastThumbnail, limitReached: $limitReached, storageFull: $storageFull, replaced: $replaced, adjustFile: $adjustFile, adjustQuad: $adjustQuad, adjustTurns: $adjustTurns, straightenFile: $straightenFile, straightenQuad: $straightenQuad, straightenTurns: $straightenTurns, straightens: $straightens)';
   }
 
   @override
@@ -401,7 +513,17 @@ class _$CaptureStateImpl implements _CaptureState {
             (identical(other.adjustFile, adjustFile) ||
                 other.adjustFile == adjustFile) &&
             (identical(other.adjustQuad, adjustQuad) ||
-                other.adjustQuad == adjustQuad));
+                other.adjustQuad == adjustQuad) &&
+            (identical(other.adjustTurns, adjustTurns) ||
+                other.adjustTurns == adjustTurns) &&
+            (identical(other.straightenFile, straightenFile) ||
+                other.straightenFile == straightenFile) &&
+            (identical(other.straightenQuad, straightenQuad) ||
+                other.straightenQuad == straightenQuad) &&
+            (identical(other.straightenTurns, straightenTurns) ||
+                other.straightenTurns == straightenTurns) &&
+            (identical(other.straightens, straightens) ||
+                other.straightens == straightens));
   }
 
   @override
@@ -420,6 +542,11 @@ class _$CaptureStateImpl implements _CaptureState {
     replaced,
     adjustFile,
     adjustQuad,
+    adjustTurns,
+    straightenFile,
+    straightenQuad,
+    straightenTurns,
+    straightens,
   );
 
   /// Create a copy of CaptureState
@@ -446,6 +573,11 @@ abstract class _CaptureState implements CaptureState {
     final bool replaced,
     final File? adjustFile,
     final Quad? adjustQuad,
+    final int adjustTurns,
+    final File? straightenFile,
+    final Quad? straightenQuad,
+    final int straightenTurns,
+    final int straightens,
   }) = _$CaptureStateImpl;
 
   @override
@@ -484,6 +616,22 @@ abstract class _CaptureState implements CaptureState {
   File? get adjustFile;
   @override
   Quad? get adjustQuad;
+
+  /// The corner step's clockwise quarter turns to upright (found on capture,
+  /// changed with «تدوير»).
+  @override
+  int get adjustTurns;
+
+  /// The page being straightened on screen: its photo, corners and turns.
+  /// [straightens] counts them, so each one plays once.
+  @override
+  File? get straightenFile;
+  @override
+  Quad? get straightenQuad;
+  @override
+  int get straightenTurns;
+  @override
+  int get straightens;
 
   /// Create a copy of CaptureState
   /// with the given fields replaced by the non-null parameter values.

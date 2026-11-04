@@ -14,6 +14,7 @@ import '../manager/capture_cubit.dart';
 import 'camera_permission_view.dart';
 import 'capture_feedback.dart';
 import 'corner_editor.dart';
+import 'straighten_animation.dart';
 import 'edge_frame_overlay.dart';
 
 /// The dark camera sheet (story 2). Reads [CaptureCubit]; holds no logic.
@@ -129,6 +130,9 @@ class _CameraSheetState extends State<CameraSheet> with WidgetsBindingObserver, 
   /// The corners being dragged on the corner step; null until the user drags.
   Quad? _adjusted;
 
+  /// The page straightening on screen, until its animation ends.
+  (File, Quad, int, int)? _straightening;
+
   void _keep(CaptureCubit cubit) {
     final Quad? q = _adjusted ?? cubit.state.adjustQuad;
     setState(() => _adjusted = null);
@@ -148,6 +152,17 @@ class _CameraSheetState extends State<CameraSheet> with WidgetsBindingObserver, 
         BlocListener<CaptureCubit, CaptureState>(
           listenWhen: (CaptureState a, CaptureState b) => a.shots != b.shots,
           listener: _onShot,
+        ),
+        BlocListener<CaptureCubit, CaptureState>(
+          listenWhen: (CaptureState a, CaptureState b) => b.straightens != a.straightens && b.straightenFile != null,
+          listener: (BuildContext _, CaptureState st) => setState(
+            () => _straightening = (
+              st.straightenFile!,
+              st.straightenQuad ?? Quad.fullFrame,
+              st.straightenTurns,
+              st.straightens,
+            ),
+          ),
         ),
         BlocListener<CaptureCubit, CaptureState>(
           listenWhen: (CaptureState a, CaptureState b) => b.pageCount > a.pageCount || (b.replaced && !a.replaced),
@@ -208,6 +223,18 @@ class _CameraSheetState extends State<CameraSheet> with WidgetsBindingObserver, 
                                   strings: s,
                                   adjusted: _adjusted,
                                   onAdjust: (Quad q) => setState(() => _adjusted = q),
+                                  straightening: switch (_straightening) {
+                                    (final File photo, final Quad quad, final int turns, final int id) =>
+                                      StraightenAnimation(
+                                        key: ValueKey<int>(id),
+                                        photo: photo,
+                                        quad: quad,
+                                        turns: turns,
+                                        background: t.cameraSurface,
+                                        onDone: () => setState(() => _straightening = null),
+                                      ),
+                                    null => null,
+                                  },
                                 )
                               : CameraPermissionView(
                                   phase: st.phase,
@@ -219,6 +246,7 @@ class _CameraSheetState extends State<CameraSheet> with WidgetsBindingObserver, 
                         if (st.adjustFile != null)
                           _AdjustBar(
                             strings: s,
+                            onRotate: cubit.rotateAdjusted,
                             onRetake: () {
                               setState(() => _adjusted = null);
                               unawaited(cubit.retakeAdjusted());
@@ -249,9 +277,13 @@ class _Viewfinder extends StatelessWidget {
     required this.strings,
     required this.adjusted,
     required this.onAdjust,
+    this.straightening,
   });
 
   final CaptureState state;
+
+  /// The page straightening itself after capture, over everything else.
+  final Widget? straightening;
   final Widget Function() preview;
   final DocScanStrings strings;
 
@@ -301,15 +333,21 @@ class _Viewfinder extends StatelessWidget {
                 builder: (BuildContext context, double o, Widget? child) => Opacity(opacity: o, child: child),
                 child: ColoredBox(
                   color: t.cameraSurface,
-                  child: CornerEditor(
-                    key: ValueKey<String>(adjust.path),
-                    photo: adjust,
-                    quad: adjusted ?? state.adjustQuad ?? Quad.fullFrame,
-                    strings: strings,
-                    onChanged: onAdjust,
+                  // The photo shows upright; the editor's corners stay in the
+                  // photo's own coordinates (RotatedBox maps the drags).
+                  child: RotatedBox(
+                    quarterTurns: state.adjustTurns,
+                    child: CornerEditor(
+                      key: ValueKey<String>(adjust.path),
+                      photo: adjust,
+                      quad: adjusted ?? state.adjustQuad ?? Quad.fullFrame,
+                      strings: strings,
+                      onChanged: onAdjust,
+                    ),
                   ),
                 ),
               ),
+            if (straightening != null) Positioned.fill(child: straightening!),
             Positioned.fill(
               child: CaptureFlash(shots: state.shots, color: t.captureFlash),
             ),
@@ -393,16 +431,19 @@ class _BottomBar extends StatelessWidget {
   }
 }
 
-/// The corner step's bar: «إعادة الالتقاط» and «حفظ الصفحة» (design `scanAdjOn`).
+/// The corner step's bar: «إعادة الالتقاط», «تدوير» and «حفظ الصفحة» (design
+/// `scanAdjOn`, rotation added 2026-11-04).
 class _AdjustBar extends StatelessWidget {
-  const _AdjustBar({required this.strings, required this.onRetake, required this.onKeep});
+  const _AdjustBar({required this.strings, required this.onRotate, required this.onRetake, required this.onKeep});
 
   final DocScanStrings strings;
+  final VoidCallback onRotate;
   final VoidCallback onRetake;
   final VoidCallback onKeep;
 
   @override
   Widget build(BuildContext context) {
+    final DocScanTheme t = DocScanTheme.of(context);
     return Padding(
       padding: ScanMetrics.cameraBar,
       child: SizedBox(
@@ -411,6 +452,14 @@ class _AdjustBar extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: <Widget>[
             _Pill(label: strings.retake, height: 44, padding: 18, quiet: true, onTap: onRetake),
+            ScanIconButton(
+              icon: t.icons.rotate,
+              label: strings.rotate,
+              onPressed: onRotate,
+              color: t.onCameraSurface,
+              background: t.onCameraSurface.withValues(alpha: 0.14),
+              size: t.iconSize,
+            ),
             _Pill(label: strings.savePage, height: 44, padding: 20, onTap: onKeep),
           ],
         ),

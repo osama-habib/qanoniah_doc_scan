@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:dartz/dartz.dart' show Either;
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../capture/data/camera_source.dart';
@@ -156,12 +157,29 @@ class _DocScanFlowState extends State<DocScanFlow> {
   bool _closing = false;
 
   ScanSessionRepo get _sessions => widget.deps.sessions;
-  void _emit(DocScanEvent e) => widget.config.onEvent?.call(e);
+
+  /// Events raised while a screen builds (a cubit created by its provider) reach
+  /// the host after the frame: a host that calls setState in onEvent would
+  /// otherwise mark itself dirty mid-build.
+  void _emit(DocScanEvent e) {
+    final void Function(DocScanEvent)? onEvent = widget.config.onEvent;
+    if (onEvent == null) return;
+    final SchedulerBinding binding = SchedulerBinding.instance;
+    if (binding.schedulerPhase == SchedulerPhase.persistentCallbacks) {
+      binding.addPostFrameCallback((Duration _) => onEvent(e));
+    } else {
+      onEvent(e);
+    }
+  }
 
   @override
   void initState() {
     super.initState();
-    _recognition = RecognitionRepo(recognizer: widget.deps.recognizer, sessions: _sessions);
+    _recognition = RecognitionRepo(
+      recognizer: widget.deps.recognizer,
+      sessions: _sessions,
+      enabled: widget.config.recognizeText,
+    );
     unawaited(_begin());
   }
 
@@ -209,7 +227,8 @@ class _DocScanFlowState extends State<DocScanFlow> {
   });
 
   void _openBuild({required bool imagesOnly}) => setState(() {
-    _imagesOnly = imagesOnly;
+    // Without text recognition there is only the photo PDF.
+    _imagesOnly = imagesOnly || !widget.config.recognizeText;
     _step = _Step.build;
   });
 
@@ -381,7 +400,7 @@ class _DocScanFlowState extends State<DocScanFlow> {
             onAddPage: _openCamera,
             onRetakeLast: (String id) => _openCamera(replacing: id),
             onOpenFilters: _openFilters,
-            onBuild: () => _openBuild(imagesOnly: false),
+            onBuild: widget.config.recognizeText ? () => _openBuild(imagesOnly: false) : null,
             onAttachImages: () => _openBuild(imagesOnly: true),
             onEmpty: _openCamera,
           ),

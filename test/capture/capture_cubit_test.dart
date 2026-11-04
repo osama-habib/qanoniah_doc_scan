@@ -34,12 +34,13 @@ void main() {
   late RecognitionRepo recognition;
   late List<DocScanEvent> events;
   late DateTime clock;
+  late FakePagePreparer preparer;
 
   CaptureCubit cubit({String? replacing}) => CaptureCubit(
     camera: camera,
     edges: edges,
     permissions: permissions,
-    preparer: FakePagePreparer(),
+    preparer: preparer,
     sessions: sessions,
     recognition: recognition,
     onEvent: events.add,
@@ -72,6 +73,7 @@ void main() {
     recognition = RecognitionRepo(recognizer: FakeTextRecognizer(), sessions: sessions);
     events = <DocScanEvent>[];
     clock = DateTime(2026);
+    preparer = FakePagePreparer();
   });
 
   tearDown(() async {
@@ -140,10 +142,10 @@ void main() {
     final CaptureCubit b = cubit();
     await b.start();
     expect(b.state.phase, CapturePhase.permanentlyDenied);
-    expect(events.map((DocScanEvent e) => e.name), containsAll(<String>[
-      'scan_permission_denied',
-      'scan_permission_permanently_denied',
-    ]));
+    expect(
+      events.map((DocScanEvent e) => e.name),
+      containsAll(<String>['scan_permission_denied', 'scan_permission_permanently_denied']),
+    );
     await a.close();
     await b.close();
   });
@@ -165,7 +167,6 @@ void main() {
     expect(retake.state.replaced, isTrue);
     await retake.close();
   });
-
 
   test('a new page in the same place re-arms auto capture (a stack of pages)', () async {
     final CaptureCubit c = cubit();
@@ -240,6 +241,38 @@ void main() {
     await c.keepAdjusted(dragged);
     expect(c.state.adjustFile, isNull);
     expect(sessions.session.pages.single.corners, dragged);
+    await c.close();
+  });
+
+  test('[UT] the page comes out upright: the turns found on the photo reach preparation', () async {
+    edges.turns = 2;
+    final CaptureCubit c = cubit();
+    await c.start();
+    c.setMode(CaptureMode.manual);
+    await c.capture();
+    await pumpEventQueue();
+    // The corner step shows the photo upright.
+    expect(c.state.adjustTurns, 2);
+    await c.keepAdjusted(c.state.adjustQuad!);
+    expect(preparer.turns.single, 2);
+    expect(sessions.session.pages.single.turns, 2);
+    await c.close();
+  });
+
+  test('[UT] «تدوير» on the corner step turns a quarter counter-clockwise and wins over the found turns', () async {
+    final CaptureCubit c = cubit();
+    await c.start();
+    c.setMode(CaptureMode.manual);
+    await c.capture();
+    await pumpEventQueue();
+    c.rotateAdjusted();
+    expect(c.state.adjustTurns, 3);
+    c.rotateAdjusted();
+    expect(c.state.adjustTurns, 2);
+    await c.keepAdjusted(c.state.adjustQuad!);
+    expect(preparer.turns.single, 2);
+    // The next page starts from the found turns again.
+    expect(c.state.adjustTurns, 0);
     await c.close();
   });
 }

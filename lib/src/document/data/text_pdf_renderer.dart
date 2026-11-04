@@ -58,6 +58,62 @@ class PdfTextBlock {
   final int? col;
 }
 
+/// One page of the text-form PDF drawn as printed (revised 2026-11-04), in PDF
+/// points: the page's background (the scan without the words it erased) under
+/// [items], each word at its printed place.
+@immutable
+class PdfPlacedPage {
+  const PdfPlacedPage({required this.width, required this.height, required this.background, required this.items});
+
+  final double width;
+  final double height;
+
+  /// JPEG or PNG bytes, drawn over the whole page.
+  final Uint8List background;
+  final List<PdfPlaced> items;
+}
+
+sealed class PdfPlaced {
+  const PdfPlaced(this.box);
+
+  final Rect box;
+}
+
+/// A word as text: [em] is its font size, [baseline] the y it sits on; it is
+/// scaled across to the box's width.
+class PdfPlacedWord extends PdfPlaced {
+  const PdfPlacedWord(
+    super.box, {
+    required this.text,
+    required this.em,
+    required this.baseline,
+    required this.bold,
+    required this.rtl,
+  });
+
+  final String text;
+  final double em;
+  final double baseline;
+  final bool bold;
+  final bool rtl;
+}
+
+/// Hidden text: a filled bar, labeled «نص محجوب» when it hides a paragraph.
+class PdfPlacedBar extends PdfPlaced {
+  const PdfPlacedBar(super.box, {this.paragraph = false});
+
+  final bool paragraph;
+}
+
+/// A rewritten paragraph: its new text flowing from the top of its old box.
+class PdfPlacedFlow extends PdfPlaced {
+  const PdfPlacedFlow(super.box, {required this.text, required this.em, required this.rtl});
+
+  final String text;
+  final double em;
+  final bool rtl;
+}
+
 /// Lays out the text-form PDF, one scanned page per run of PDF pages (FR-011).
 ///
 /// A port because it is a platform seam (P5): the platform renderer gets Arabic
@@ -67,7 +123,12 @@ class PdfTextBlock {
 abstract interface class TextPdfRenderer {
   /// Throws on failure; [PdfBuilder] maps it to a build failure.
   Future<Uint8List> render(List<List<PdfTextBlock>> pages, PdfLook look);
+
+  /// The pages as printed, one PDF page each (revised 2026-11-04).
+  Future<Uint8List> renderPlaced(List<PdfPlacedPage> pages, PdfLook look);
 }
+
+Map<String, Object> _rect(Rect r) => <String, Object>{'l': r.left, 't': r.top, 'r': r.right, 'b': r.bottom};
 
 /// Text form through each platform's own text engine: TextKit / CoreText on iOS,
 /// `PdfDocument` with `StaticLayout` on Android. Falls back to [fallback] when the
@@ -82,53 +143,94 @@ class PlatformTextPdfRenderer implements TextPdfRenderer {
   @override
   Future<Uint8List> render(List<List<PdfTextBlock>> pages, PdfLook look) async {
     try {
-      final Uint8List? pdf = await _channel.invokeMethod<Uint8List>(
-        'renderText',
-        <String, Object?>{
-          'font': look.font,
-          'fontFallback': look.fontFallback,
-          'fontBold': look.fontBold,
-          'text': look.text,
-          'fill': look.redactionFill,
-          'onFill': look.onRedactionFill,
-          'label': look.redactedLabel,
-          'pages': <List<Map<String, Object>>>[
-            for (final List<PdfTextBlock> page in pages)
-              <Map<String, Object>>[
-                for (final PdfTextBlock b in page)
-                  <String, Object>{
-                    'rtl': b.rtl,
-                    'align': b.align.name,
-                    'size': b.size,
-                    'heading': b.heading,
-                    'space': b.spaceBefore,
-                    'indent': b.indent,
-                    if (b.table != null) 'table': b.table!,
-                    if (b.row != null) 'row': b.row!,
-                    if (b.col != null) 'col': b.col!,
-                    'segments': <Map<String, Object>>[
-                      for (final FinalSegment s in b.segments)
-                        switch (s) {
-                          FinalText(:final String text) => <String, Object>{
-                            'text': text,
-                          },
-                          FinalRedaction(:final bool wholeParagraph) =>
-                            <String, Object>{
-                              'redacted': wholeParagraph
-                                  ? 'paragraph'
-                                  : 'words',
-                            },
+      final Uint8List? pdf = await _channel.invokeMethod<Uint8List>('renderText', <String, Object?>{
+        'font': look.font,
+        'fontFallback': look.fontFallback,
+        'fontBold': look.fontBold,
+        'text': look.text,
+        'fill': look.redactionFill,
+        'onFill': look.onRedactionFill,
+        'label': look.redactedLabel,
+        'pages': <List<Map<String, Object>>>[
+          for (final List<PdfTextBlock> page in pages)
+            <Map<String, Object>>[
+              for (final PdfTextBlock b in page)
+                <String, Object>{
+                  'rtl': b.rtl,
+                  'align': b.align.name,
+                  'size': b.size,
+                  'heading': b.heading,
+                  'space': b.spaceBefore,
+                  'indent': b.indent,
+                  if (b.table != null) 'table': b.table!,
+                  if (b.row != null) 'row': b.row!,
+                  if (b.col != null) 'col': b.col!,
+                  'segments': <Map<String, Object>>[
+                    for (final FinalSegment s in b.segments)
+                      switch (s) {
+                        FinalText(:final String text) => <String, Object>{'text': text},
+                        FinalRedaction(:final bool wholeParagraph) => <String, Object>{
+                          'redacted': wholeParagraph ? 'paragraph' : 'words',
                         },
-                    ],
-                  },
-              ],
-          ],
-        },
-      );
+                      },
+                  ],
+                },
+            ],
+        ],
+      });
       if (pdf == null) throw StateError('No PDF.');
       return pdf;
     } on MissingPluginException {
       return fallback.render(pages, look);
+    }
+  }
+
+  @override
+  Future<Uint8List> renderPlaced(List<PdfPlacedPage> pages, PdfLook look) async {
+    try {
+      final Uint8List? pdf = await _channel.invokeMethod<Uint8List>('renderPlaced', <String, Object?>{
+        'font': look.font,
+        'fontFallback': look.fontFallback,
+        'fontBold': look.fontBold,
+        'text': look.text,
+        'fill': look.redactionFill,
+        'onFill': look.onRedactionFill,
+        'label': look.redactedLabel,
+        'pages': <Map<String, Object>>[
+          for (final PdfPlacedPage p in pages)
+            <String, Object>{
+              'w': p.width,
+              'h': p.height,
+              'bg': p.background,
+              'items': <Map<String, Object>>[
+                for (final PdfPlaced it in p.items)
+                  switch (it) {
+                    PdfPlacedWord() => <String, Object>{
+                      'k': 'word',
+                      ..._rect(it.box),
+                      'text': it.text,
+                      'em': it.em,
+                      'base': it.baseline,
+                      'bold': it.bold,
+                      'rtl': it.rtl,
+                    },
+                    PdfPlacedBar() => <String, Object>{'k': 'bar', ..._rect(it.box), 'paragraph': it.paragraph},
+                    PdfPlacedFlow() => <String, Object>{
+                      'k': 'flow',
+                      ..._rect(it.box),
+                      'text': it.text,
+                      'em': it.em,
+                      'rtl': it.rtl,
+                    },
+                  },
+              ],
+            },
+        ],
+      });
+      if (pdf == null) throw StateError('No PDF.');
+      return pdf;
+    } on MissingPluginException {
+      return fallback.renderPlaced(pages, look);
     }
   }
 }
@@ -141,15 +243,11 @@ class PdfPackageTextRenderer implements TextPdfRenderer {
   @override
   Future<Uint8List> render(List<List<PdfTextBlock>> pages, PdfLook look) {
     final pw.Font base = pw.Font.ttf(ByteData.sublistView(look.font));
-    final pw.Font fallback = pw.Font.ttf(
-      ByteData.sublistView(look.fontFallback),
-    );
+    final pw.Font fallback = pw.Font.ttf(ByteData.sublistView(look.fontFallback));
     final Uint8List? boldBytes = look.fontBold;
     final pw.ThemeData theme = pw.ThemeData.withFont(
       base: base,
-      bold: boldBytes == null
-          ? base
-          : pw.Font.ttf(ByteData.sublistView(boldBytes)),
+      bold: boldBytes == null ? base : pw.Font.ttf(ByteData.sublistView(boldBytes)),
       fontFallback: <pw.Font>[fallback],
     );
     final PdfColor ink = PdfColor.fromInt(look.text);
@@ -159,16 +257,10 @@ class PdfPackageTextRenderer implements TextPdfRenderer {
     for (final List<PdfTextBlock> blocks in pages) {
       doc.addPage(
         pw.MultiPage(
-          pageFormat: PdfPageFormat.a4.applyMargin(
-            left: 48,
-            top: 56,
-            right: 48,
-            bottom: 56,
-          ),
+          pageFormat: PdfPageFormat.a4.applyMargin(left: 48, top: 56, right: 48, bottom: 56),
           textDirection: pw.TextDirection.rtl,
           build: (pw.Context _) => <pw.Widget>[
-            for (final PdfTextBlock b in blocks)
-              _paragraph(b, ink, fill, onFill, look.redactedLabel),
+            for (final PdfTextBlock b in blocks) _paragraph(b, ink, fill, onFill, look.redactedLabel),
           ],
         ),
       );
@@ -179,25 +271,82 @@ class PdfPackageTextRenderer implements TextPdfRenderer {
     return doc.save();
   }
 
-  static pw.Widget _paragraph(
-    PdfTextBlock b,
-    PdfColor ink,
-    PdfColor fill,
-    PdfColor onFill,
-    String label,
-  ) {
-    final pw.TextDirection dir = b.rtl
-        ? pw.TextDirection.rtl
-        : pw.TextDirection.ltr;
+  @override
+  Future<Uint8List> renderPlaced(List<PdfPlacedPage> pages, PdfLook look) {
+    final pw.Font base = pw.Font.ttf(ByteData.sublistView(look.font));
+    final pw.Font latin = pw.Font.ttf(ByteData.sublistView(look.fontFallback));
+    final Uint8List? boldBytes = look.fontBold;
+    final pw.Font bold = boldBytes == null ? base : pw.Font.ttf(ByteData.sublistView(boldBytes));
+    final PdfColor ink = PdfColor.fromInt(look.text);
+    final PdfColor fill = PdfColor.fromInt(look.redactionFill);
+    final pw.Document doc = pw.Document();
+    for (final PdfPlacedPage page in pages) {
+      doc.addPage(
+        pw.Page(
+          pageFormat: PdfPageFormat(page.width, page.height),
+          margin: pw.EdgeInsets.zero,
+          build: (pw.Context ctx) => pw.Stack(
+            children: <pw.Widget>[
+              pw.Positioned.fill(child: pw.Image(pw.MemoryImage(page.background), fit: pw.BoxFit.fill)),
+              for (final PdfPlaced it in page.items)
+                switch (it) {
+                  PdfPlacedWord() => pw.Positioned(
+                    left: it.box.left,
+                    // The pdf package places text by its top; its ascent puts
+                    // the baseline back where it was printed.
+                    top: it.baseline - (it.bold ? bold : base).getFont(ctx).ascent * it.em,
+                    child: pw.SizedBox(
+                      width: it.box.width,
+                      child: pw.FittedBox(
+                        fit: pw.BoxFit.fitWidth,
+                        child: pw.Text(
+                          it.text,
+                          textDirection: it.rtl ? pw.TextDirection.rtl : pw.TextDirection.ltr,
+                          style: pw.TextStyle(
+                            font: it.bold ? bold : base,
+                            fontFallback: <pw.Font>[latin],
+                            fontSize: it.em,
+                            color: ink,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  PdfPlacedBar() => pw.Positioned(
+                    left: it.box.left,
+                    top: it.box.top,
+                    child: pw.Container(width: it.box.width, height: it.box.height, color: fill),
+                  ),
+                  PdfPlacedFlow() => pw.Positioned(
+                    left: it.box.left,
+                    top: it.box.top,
+                    child: pw.SizedBox(
+                      width: it.box.width,
+                      child: pw.Text(
+                        it.text,
+                        textDirection: it.rtl ? pw.TextDirection.rtl : pw.TextDirection.ltr,
+                        style: pw.TextStyle(font: base, fontFallback: <pw.Font>[latin], fontSize: it.em, color: ink),
+                      ),
+                    ),
+                  ),
+                },
+            ],
+          ),
+        ),
+      );
+    }
+    if (pages.isEmpty) doc.addPage(pw.Page(build: (pw.Context _) => pw.SizedBox()));
+    return doc.save();
+  }
+
+  static pw.Widget _paragraph(PdfTextBlock b, PdfColor ink, PdfColor fill, PdfColor onFill, String label) {
+    final pw.TextDirection dir = b.rtl ? pw.TextDirection.rtl : pw.TextDirection.ltr;
     final pw.Widget body;
     if (b.segments.length == 1 && b.segments.first is FinalRedaction) {
       body = pw.Container(
         width: double.infinity,
         padding: const pw.EdgeInsets.symmetric(vertical: 8, horizontal: 12),
-        decoration: pw.BoxDecoration(
-          color: fill,
-          borderRadius: pw.BorderRadius.circular(4),
-        ),
+        decoration: pw.BoxDecoration(color: fill, borderRadius: pw.BorderRadius.circular(4)),
         child: pw.Text(
           label,
           textDirection: pw.TextDirection.rtl,
@@ -219,10 +368,7 @@ class PdfPackageTextRenderer implements TextPdfRenderer {
                     width: 36,
                     height: 11,
                     margin: const pw.EdgeInsets.symmetric(horizontal: 2),
-                    decoration: pw.BoxDecoration(
-                      color: fill,
-                      borderRadius: pw.BorderRadius.circular(2),
-                    ),
+                    decoration: pw.BoxDecoration(color: fill, borderRadius: pw.BorderRadius.circular(2)),
                   ),
                 ),
               },
@@ -230,9 +376,6 @@ class PdfPackageTextRenderer implements TextPdfRenderer {
         ),
       );
     }
-    return pw.Padding(
-      padding: const pw.EdgeInsets.only(bottom: 10),
-      child: body,
-    );
+    return pw.Padding(padding: const pw.EdgeInsets.only(bottom: 10), child: body);
   }
 }

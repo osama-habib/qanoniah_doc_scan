@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -11,8 +12,9 @@ import '../../core/session/scan_session.dart';
 import '../manager/review_cubit.dart';
 
 /// «توضيح الصفحات»: the step between the camera and review (story 13, design
-/// `scan-filter`). A large page with previous/next, a strip of combinable filters
-/// previewed on the page itself, and «تطبيق على كل الصفحات» (on by default).
+/// `scan-filter`). A large page with previous/next and «تدوير», a strip of filters
+/// previewed on the page itself, one at a time (owner decision 2026-11-04), and
+/// «تطبيق على كل الصفحات» (on by default).
 ///
 /// The strip previews filters with color matrices; the large page shows the real
 /// result once [ReviewCubit] has re-prepared it.
@@ -42,7 +44,25 @@ class _FiltersScreenState extends State<FiltersScreen> {
   late int _index = widget.initialIndex;
   bool _allPages = true;
 
+  /// The strip's real previews of the current page, and which page version
+  /// they show.
+  Map<PageFilter, File> _previews = const <PageFilter, File>{};
+  String? _previewsOf;
+
+  void _loadPreviews(ReviewCubit cubit, CapturedPage page) {
+    final String key = '${page.rawFile.path}|${page.corners}|${page.turns}';
+    if (key == _previewsOf) return;
+    _previewsOf = key;
+    _previews = const <PageFilter, File>{};
+    unawaited(
+      cubit.filterPreviews(page, _filters).then((Map<PageFilter, File> p) {
+        if (mounted && _previewsOf == key) setState(() => _previews = p);
+      }),
+    );
+  }
+
   static const List<PageFilter> _filters = <PageFilter>[
+    PageFilter.original,
     PageFilter.autoEnhance,
     PageFilter.sharpenText,
     PageFilter.removeShadows,
@@ -65,11 +85,19 @@ class _FiltersScreenState extends State<FiltersScreen> {
     unawaited(cubit.setFilters(next, pageId: _allPages ? null : page.id));
   }
 
-  void _toggle(ReviewCubit cubit, CapturedPage page, PageFilter f) {
-    final Set<PageFilter> next = Set<PageFilter>.of(page.filters)..remove(PageFilter.original);
-    if (!next.remove(f)) next.add(f);
-    _apply(cubit, page, next);
+  /// One filter at a time: the tapped one replaces the current one; tapping the
+  /// current one goes back to the original.
+  void _choose(ReviewCubit cubit, CapturedPage page, PageFilter f) {
+    final bool current = page.filters.contains(f) && page.filters.length == 1;
+    unawaited(cubit.setFilter(current ? PageFilter.original : f, pageId: _allPages ? null : page.id));
   }
+
+  /// The page's one filter; the original when none (or, from before filters were
+  /// single, the first of several).
+  PageFilter _current(CapturedPage page) => _filters.firstWhere(
+    (PageFilter f) => f != PageFilter.original && page.filters.contains(f),
+    orElse: () => PageFilter.original,
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -82,6 +110,7 @@ class _FiltersScreenState extends State<FiltersScreen> {
         if (st.pages.isEmpty) return ColoredBox(color: t.cameraSurface);
         final int i = _index.clamp(0, st.pages.length - 1);
         final CapturedPage page = st.pages[i];
+        _loadPreviews(cubit, page);
         final bool many = st.pages.length > 1;
         final bool any = page.filters.any((PageFilter f) => f != PageFilter.original);
         return ColoredBox(
@@ -116,6 +145,14 @@ class _FiltersScreenState extends State<FiltersScreen> {
                           ],
                         ),
                       ),
+                      ScanIconButton(
+                        icon: t.icons.rotate,
+                        label: s.rotate,
+                        color: t.onCameraSurface,
+                        background: t.onCameraSurface.withValues(alpha: 0.12),
+                        onPressed: st.working ? null : () => unawaited(cubit.rotate(page.id)),
+                      ),
+                      SizedBox(width: t.spaceSm),
                       _Pill(label: s.next, onTap: st.working ? null : widget.onNext),
                     ],
                   ),
@@ -128,9 +165,14 @@ class _FiltersScreenState extends State<FiltersScreen> {
                       children: <Widget>[
                         ClipRRect(
                           borderRadius: BorderRadius.circular(t.radiusSm / 2),
-                          child: Image.file(page.preparedFile, key: ValueKey<String>(page.preparedFile.path), fit: BoxFit.contain),
+                          child: Image.file(
+                            page.preparedFile,
+                            key: ValueKey<String>(page.preparedFile.path),
+                            fit: BoxFit.contain,
+                          ),
                         ),
-                        if (st.working) CircularProgressIndicator(color: t.onCameraSurface, strokeWidth: t.frameStrokeWidth),
+                        if (st.working)
+                          CircularProgressIndicator(color: t.onCameraSurface, strokeWidth: t.frameStrokeWidth),
                         if (many) ...<Widget>[
                           PositionedDirectional(
                             start: -t.spaceXl + t.spaceXs,
@@ -202,7 +244,8 @@ class _FiltersScreenState extends State<FiltersScreen> {
                           SizedBox(height: t.spaceSm),
                           SizedBox(
                             // Thumbnail, gap, and one caption line at the user's text size.
-                            height: t.thumbnailSize * 1.5 +
+                            height:
+                                t.thumbnailSize * 1.5 +
                                 t.spaceXs +
                                 MediaQuery.textScalerOf(context).scale(t.captionStyle.fontSize ?? t.iconSize) *
                                     (t.captionStyle.height ?? 1.5) +
@@ -216,8 +259,9 @@ class _FiltersScreenState extends State<FiltersScreen> {
                                 filter: _filters[k],
                                 label: _label(_filters[k]),
                                 page: page,
-                                on: page.filters.contains(_filters[k]),
-                                onTap: st.working ? null : () => _toggle(cubit, page, _filters[k]),
+                                preview: _previews[_filters[k]],
+                                on: _current(page) == _filters[k],
+                                onTap: st.working ? null : () => _choose(cubit, page, _filters[k]),
                               ),
                             ),
                           ),
@@ -287,34 +331,96 @@ class _Pill extends StatelessWidget {
   }
 }
 
-/// One filter: the page itself under an approximation of the filter, its name,
-/// and a check when it is on.
+/// One filter: the cropped page with that filter really applied (a small
+/// preview), its name, and a check when it is on. Until the preview is made, the
+/// cropped page under an approximation of the filter.
 class _FilterChip extends StatelessWidget {
-  const _FilterChip({required this.filter, required this.label, required this.page, required this.on, required this.onTap});
+  const _FilterChip({
+    required this.filter,
+    required this.label,
+    required this.page,
+    required this.preview,
+    required this.on,
+    required this.onTap,
+  });
 
   final PageFilter filter;
   final String label;
   final CapturedPage page;
+  final File? preview;
   final bool on;
   final VoidCallback? onTap;
 
   // Previews only: the page is re-prepared with the real filter when chosen.
   static const List<double> _identity = <double>[1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0];
   static const List<double> _gray = <double>[
-    0.2126, 0.7152, 0.0722, 0, 0, 0.2126, 0.7152, 0.0722, 0, 0, 0.2126, 0.7152, 0.0722, 0, 0, 0, 0, 0, 1, 0,
+    0.2126,
+    0.7152,
+    0.0722,
+    0,
+    0,
+    0.2126,
+    0.7152,
+    0.0722,
+    0,
+    0,
+    0.2126,
+    0.7152,
+    0.0722,
+    0,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
   ];
   static const List<double> _bw = <double>[
-    0.64, 2.15, 0.22, 0, -300, 0.64, 2.15, 0.22, 0, -300, 0.64, 2.15, 0.22, 0, -300, 0, 0, 0, 1, 0,
+    0.64,
+    2.15,
+    0.22,
+    0,
+    -300,
+    0.64,
+    2.15,
+    0.22,
+    0,
+    -300,
+    0.64,
+    2.15,
+    0.22,
+    0,
+    -300,
+    0,
+    0,
+    0,
+    1,
+    0,
   ];
   static const List<double> _contrast = <double>[
-    1.5, 0, 0, 0, -64, 0, 1.5, 0, 0, -64, 0, 0, 1.5, 0, -64, 0, 0, 0, 1, 0,
+    1.5,
+    0,
+    0,
+    0,
+    -64,
+    0,
+    1.5,
+    0,
+    0,
+    -64,
+    0,
+    0,
+    1.5,
+    0,
+    -64,
+    0,
+    0,
+    0,
+    1,
+    0,
   ];
-  static const List<double> _bright = <double>[
-    1.15, 0, 0, 0, 18, 0, 1.15, 0, 0, 18, 0, 0, 1.15, 0, 18, 0, 0, 0, 1, 0,
-  ];
-  static const List<double> _text = <double>[
-    1.3, 0, 0, 0, -38, 0, 1.3, 0, 0, -38, 0, 0, 1.3, 0, -38, 0, 0, 0, 1, 0,
-  ];
+  static const List<double> _bright = <double>[1.15, 0, 0, 0, 18, 0, 1.15, 0, 0, 18, 0, 0, 1.15, 0, 18, 0, 0, 0, 1, 0];
+  static const List<double> _text = <double>[1.3, 0, 0, 0, -38, 0, 1.3, 0, 0, -38, 0, 0, 1.3, 0, -38, 0, 0, 0, 1, 0];
 
   List<double> get _matrix => switch (filter) {
     PageFilter.original => _identity,
@@ -353,10 +459,18 @@ class _FilterChip extends StatelessWidget {
                 child: Stack(
                   fit: StackFit.expand,
                   children: <Widget>[
-                    ColorFiltered(
-                      colorFilter: ColorFilter.matrix(_matrix),
-                      child: Image.file(page.rawFile, fit: BoxFit.cover, cacheWidth: 200),
-                    ),
+                    if (preview != null)
+                      Image.file(
+                        preview!,
+                        key: ValueKey<String>(preview!.path),
+                        fit: BoxFit.cover,
+                        gaplessPlayback: true,
+                      )
+                    else
+                      ColorFiltered(
+                        colorFilter: ColorFilter.matrix(_matrix),
+                        child: Image.file(page.preparedFile, fit: BoxFit.cover, cacheWidth: 200, gaplessPlayback: true),
+                      ),
                     if (on)
                       PositionedDirectional(
                         top: t.spaceXs,

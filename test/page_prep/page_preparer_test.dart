@@ -32,10 +32,24 @@ void main() {
   Future<img.Image> run(Set<PageFilter> filters, {Quad q = page, String name = 'p'}) async {
     final File prepared = File('${tmp.path}/$name.jpg');
     final File ocr = File('${tmp.path}/$name.png');
-    final bool ok = preparePage(raw.path, <double>[
-      q.topLeft.dx, q.topLeft.dy, q.topRight.dx, q.topRight.dy,
-      q.bottomRight.dx, q.bottomRight.dy, q.bottomLeft.dx, q.bottomLeft.dy,
-    ], filters.map((PageFilter f) => f.index).toList(), prepared.path, ocr.path, 2200, 90);
+    final bool ok = preparePage(
+      raw.path,
+      <double>[
+        q.topLeft.dx,
+        q.topLeft.dy,
+        q.topRight.dx,
+        q.topRight.dy,
+        q.bottomRight.dx,
+        q.bottomRight.dy,
+        q.bottomLeft.dx,
+        q.bottomLeft.dy,
+      ],
+      filters.map((PageFilter f) => f.index).toList(),
+      prepared.path,
+      ocr.path,
+      2200,
+      90,
+    );
     expect(ok, isTrue);
     final img.Image bw = img.decodePng(ocr.readAsBytesSync())!;
     // Recognition input is strictly black and white.
@@ -78,5 +92,46 @@ void main() {
     final img.Image a = await run(<PageFilter>{PageFilter.removeShadows, PageFilter.sharpenText}, name: 'a');
     final img.Image b = await run(<PageFilter>{PageFilter.sharpenText, PageFilter.removeShadows}, name: 'b');
     expect(a.getBytes(), b.getBytes());
+  });
+
+  test('[UT] turns rotate the straightened page clockwise, a quarter at a time', () async {
+    // A dark mark in the page's top left corner shows where the page's top is.
+    final img.Image photo = img.Image(width: 300, height: 400);
+    img.fill(photo, color: img.ColorRgb8(235, 235, 235));
+    img.fillRect(photo, x1: 0, y1: 0, x2: 60, y2: 60, color: img.ColorRgb8(10, 10, 10));
+    final File src = File('${tmp.path}/mark.jpg')..writeAsBytesSync(img.encodeJpg(photo, quality: 95));
+    img.Image prep(int turns) {
+      final File out = File('${tmp.path}/t$turns.jpg');
+      expect(
+        preparePage(
+          src.path,
+          <double>[0, 0, 1, 0, 1, 1, 0, 1],
+          <int>[0],
+          out.path,
+          '${tmp.path}/t$turns.png',
+          2200,
+          90,
+          turns: turns,
+        ),
+        isTrue,
+      );
+      return img.decodeJpg(out.readAsBytesSync())!;
+    }
+
+    bool dark(img.Image im, int x, int y) => im.getPixel(x, y).r < 100;
+    final img.Image t0 = prep(0);
+    expect((t0.width, t0.height), (300, 400));
+    expect(dark(t0, 10, 10), isTrue);
+    // One clockwise quarter: landscape, the mark at the top right.
+    final img.Image t1 = prep(1);
+    expect((t1.width, t1.height), (400, 300));
+    expect(dark(t1, t1.width - 10, 10), isTrue);
+    // Upside down: the mark at the bottom right.
+    final img.Image t2 = prep(2);
+    expect(dark(t2, t2.width - 10, t2.height - 10), isTrue);
+    // Three quarters: the mark at the bottom left.
+    final img.Image t3 = prep(3);
+    expect((t3.width, t3.height), (400, 300));
+    expect(dark(t3, 10, t3.height - 10), isTrue);
   });
 }

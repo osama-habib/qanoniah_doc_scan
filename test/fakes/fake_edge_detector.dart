@@ -23,6 +23,12 @@ class FakeEdgeDetector implements EdgeDetector {
   @override
   Future<Quad?> detectInPhoto(File photo) async => photoQuad;
 
+  /// What [uprightTurns] reports.
+  int turns = 0;
+
+  @override
+  Future<int> uprightTurns(File photo, Quad corners) async => turns;
+
   @override
   Future<void> dispose() async {}
 }

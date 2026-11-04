@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:dartz/dartz.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
 import 'package:qanoniah_doc_scan/qanoniah_doc_scan.dart';
@@ -48,9 +49,12 @@ class WordsRecognizer implements TextRecognizer {
   @override
   Future<Either<RecognitionFailure, RawRecognition>> recognize(File image, RecognitionLanguage language) async =>
       Right<RecognitionFailure, RawRecognition>(
-        RawRecognition(blocksAreParagraphs: false, blocks: <List<Word>>[
-          <Word>[Word(text: 'حكم', box: const Rect.fromLTWH(10, 10, 40, 20), confidence: 0.95)],
-        ]),
+        RawRecognition(
+          blocksAreParagraphs: false,
+          blocks: <List<Word>>[
+            <Word>[Word(text: 'حكم', box: const Rect.fromLTWH(10, 10, 40, 20), confidence: 0.95)],
+          ],
+        ),
       );
 }
 
@@ -58,11 +62,14 @@ void main() {
   late Directory tmp;
   late Directory shots;
   final List<DocScanEvent> events = <DocScanEvent>[];
+  // Events that reached the host during a build: a host calling setState there crashes.
+  final List<String> midBuild = <String>[];
 
   setUp(() async {
     tmp = await Directory.systemTemp.createTemp('flow');
     shots = await Directory('${tmp.path}/shots').create();
     events.clear();
+    midBuild.clear();
     DocScan.debugDeps = () => ScanFlowDeps(
       sessions: ScanSessionRepo(tempRoot: () async => tmp),
       recognizer: WordsRecognizer(),
@@ -74,14 +81,19 @@ void main() {
   });
 
   tearDown(() async {
+    expect(midBuild, isEmpty, reason: 'onEvent was called during a build');
     DocScan.debugDeps = null;
     await tmp.delete(recursive: true);
   });
 
-  DocScanConfig config() => DocScanConfig(
+  DocScanConfig config({bool recognizeText = true}) => DocScanConfig(
+    recognizeText: recognizeText,
     pdfFont: File('example/assets/fonts/NotoSansArabic-Regular.ttf').readAsBytesSync(),
     pdfFontFallback: File('example/assets/fonts/NotoSans-Regular.ttf').readAsBytesSync(),
-    onEvent: events.add,
+    onEvent: (DocScanEvent e) {
+      if (SchedulerBinding.instance.schedulerPhase == SchedulerPhase.persistentCallbacks) midBuild.add(e.name);
+      events.add(e);
+    },
   );
 
   Future<void> settle(WidgetTester t, Finder f, {int tries = 100}) async {
@@ -99,11 +111,14 @@ void main() {
       .map((Directory d) => d.path)
       .toList();
 
-  Widget host(void Function(Future<DocScanResult?>) onResult) => testApp(
+  Widget host(void Function(Future<DocScanResult?>) onResult, {bool recognizeText = true}) => testApp(
     Builder(
       builder: (BuildContext context) => Scaffold(
         body: Center(
-          child: TextButton(onPressed: () => onResult(DocScan.start(context, config())), child: const Text('scan')),
+          child: TextButton(
+            onPressed: () => onResult(DocScan.start(context, config(recognizeText: recognizeText))),
+            child: const Text('scan'),
+          ),
         ),
       ),
     ),
@@ -148,10 +163,18 @@ void main() {
     expect(r!.pageTexts.single, 'حكم');
     expect(r!.pdf.existsSync(), isTrue);
     expect(sessionDirs(), isEmpty);
-    expect(events.map((DocScanEvent e) => e.name), containsAllInOrder(<String>[
-      'scan_started', 'scan_page_captured', 'scan_review_opened', 'scan_build_started',
-      'scan_build_completed', 'scan_preview_opened', 'scan_attached',
-    ]));
+    expect(
+      events.map((DocScanEvent e) => e.name),
+      containsAllInOrder(<String>[
+        'scan_started',
+        'scan_page_captured',
+        'scan_review_opened',
+        'scan_build_started',
+        'scan_build_completed',
+        'scan_preview_opened',
+        'scan_attached',
+      ]),
+    );
   });
 
   testWidgets('cancel returns null and leaves no files; a second start throws', (WidgetTester t) async {
@@ -186,6 +209,32 @@ void main() {
     await settle(t, find.text('scan'));
     expect(await t.runAsync<DocScanResult?>(() => result), isNull);
     expect(sessionDirs(), isEmpty);
+  });
+
+  testWidgets('without text recognition review offers only the photo PDF, and nothing is read', (WidgetTester t) async {
+    late Future<DocScanResult?> result;
+    await t.pumpWidget(host((Future<DocScanResult?> f) => result = f, recognizeText: false));
+    await t.tap(find.text('scan'));
+    await settle(t, find.bySemanticsLabel('التقاط'));
+    await capturePage(t);
+    await t.tap(find.text('حفظ (1)'));
+    await settle(t, find.text('التالي'));
+    await t.tap(find.text('التالي'));
+    await settle(t, find.bySemanticsLabel('إرفاق كملف PDF'));
+    expect(find.bySemanticsLabel('إنشاء مستند قابل للتعديل'), findsNothing);
+    await t.tap(find.bySemanticsLabel('إرفاق كملف PDF'));
+    await settle(t, find.bySemanticsLabel('معاينة ملف PDF'), tries: 200);
+    expect(find.text('حكم'), findsNothing);
+    await t.pump(const Duration(milliseconds: 300));
+    await t.tap(find.text('إرفاق كملف PDF').last);
+    DocScanResult? r;
+    for (int i = 0; i < 100 && r == null; i++) {
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      await t.pump();
+      unawaited(result.then((DocScanResult? v) => r = v));
+    }
+    expect(r!.form, DocScanPdfForm.image);
+    expect(r!.pageTexts.single, isEmpty);
   });
 
   testWidgets('«إرفاق كملف PDF» on review goes straight to the photo preview', (WidgetTester t) async {

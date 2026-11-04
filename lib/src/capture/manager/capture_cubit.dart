@@ -48,6 +48,17 @@ abstract class CaptureState with _$CaptureState {
     /// with the corners found on it (design `scanAdj`).
     File? adjustFile,
     Quad? adjustQuad,
+
+    /// The corner step's clockwise quarter turns to upright (found on capture,
+    /// changed with «تدوير»).
+    @Default(0) int adjustTurns,
+
+    /// The page being straightened on screen: its photo, corners and turns.
+    /// [straightens] counts them, so each one plays once.
+    File? straightenFile,
+    Quad? straightenQuad,
+    @Default(0) int straightenTurns,
+    @Default(0) int straightens,
   }) = _CaptureState;
 }
 
@@ -173,8 +184,24 @@ class CaptureCubit extends Cubit<CaptureState> {
         // live frame's corners are the fallback, the whole photo the last resort.
         final Quad found = await _edges.detectInPhoto(raw) ?? corners;
         if (isClosed) return;
-        if (!adjust) return _store(raw, found);
-        emit(state.copyWith(capturing: false, shots: state.shots + 1, adjustFile: raw, adjustQuad: found));
+        // Then which way is up: a page held sideways or upside down comes out
+        // upright, from the direction of its text.
+        final Future<int> turns = _edges.uprightTurns(raw, found);
+        if (!adjust) {
+          final int upright = await turns;
+          if (isClosed) return;
+          _straighten(raw, found, upright);
+          return _store(raw, found, upright);
+        }
+        // The corner step opens at once; the page turns upright when that is
+        // known, unless the user turned it first.
+        _rotatedByHand = false;
+        emit(
+          state.copyWith(capturing: false, shots: state.shots + 1, adjustFile: raw, adjustQuad: found, adjustTurns: 0),
+        );
+        final int upright = await turns;
+        if (isClosed || _rotatedByHand || state.adjustFile?.path != raw.path) return;
+        emit(state.copyWith(adjustTurns: upright));
       },
     );
   }
@@ -183,15 +210,37 @@ class CaptureCubit extends Cubit<CaptureState> {
   Future<void> keepAdjusted(Quad corners) async {
     final File? raw = state.adjustFile;
     if (raw == null || state.capturing) return;
-    emit(state.copyWith(capturing: true, adjustFile: null, adjustQuad: null));
-    await _store(raw, corners);
+    final int turns = state.adjustTurns;
+    emit(state.copyWith(capturing: true, adjustFile: null, adjustQuad: null, adjustTurns: 0));
+    _straighten(raw, corners, turns);
+    await _store(raw, corners, turns);
   }
+
+  void _straighten(File raw, Quad corners, int turns) => emit(
+    state.copyWith(
+      straightenFile: raw,
+      straightenQuad: corners,
+      straightenTurns: turns,
+      straightens: state.straightens + 1,
+    ),
+  );
+
+  /// «تدوير» on the corner step: a quarter turn counter-clockwise.
+  void rotateAdjusted() {
+    if (state.adjustFile == null) return;
+    _rotatedByHand = true;
+    emit(state.copyWith(adjustTurns: (state.adjustTurns + 3) % 4));
+  }
+
+  /// Set once the user turned the corner step's page; the found turns then no
+  /// longer apply.
+  bool _rotatedByHand = false;
 
   /// «إعادة الالتقاط» on the corner step: the photo is dropped.
   Future<void> retakeAdjusted() async {
     final File? raw = state.adjustFile;
     if (raw == null) return;
-    emit(state.copyWith(adjustFile: null, adjustQuad: null));
+    emit(state.copyWith(adjustFile: null, adjustQuad: null, adjustTurns: 0));
     try {
       await raw.delete();
     } on FileSystemException catch (_) {}
@@ -213,7 +262,7 @@ class CaptureCubit extends Cubit<CaptureState> {
     return raw;
   }
 
-  Future<void> _store(File raw, Quad corners) async {
+  Future<void> _store(File raw, Quad corners, int turns) async {
     final File prepared = _sessions.newFile('jpg');
     final File ocr = _sessions.newFile('png');
     final Either<StorageFailure, Unit> ok = await _preparer.prepare(
@@ -222,6 +271,7 @@ class CaptureCubit extends Cubit<CaptureState> {
       filters: const <PageFilter>{PageFilter.original},
       prepared: prepared,
       ocrInput: ocr,
+      turns: turns,
     );
     if (isClosed) return;
     if (ok.isLeft()) return emit(state.copyWith(capturing: false, storageFull: true));
@@ -232,6 +282,7 @@ class CaptureCubit extends Cubit<CaptureState> {
       rawFile: raw,
       corners: corners,
       filters: const <PageFilter>{PageFilter.original},
+      turns: turns,
       preparedFile: prepared,
       ocrInputFile: ocr,
       recognition: const RecognitionState.pending(),

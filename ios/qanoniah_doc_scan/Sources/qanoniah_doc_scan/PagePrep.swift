@@ -40,6 +40,9 @@ enum PagePrep {
     // A hair inside the found edge, so no sliver of the desk survives.
     let inset = page.extent.insetBy(dx: page.extent.width * 0.006, dy: page.extent.height * 0.006).integral
     page = normalized(page.cropped(to: inset))
+    // Upright: clockwise quarter turns (`.right` shows the image turned 90° clockwise).
+    let turns = ((args["turns"] as? Int) ?? 0) % 4
+    if turns != 0 { page = normalized(page.oriented(orientation(turns))) }
 
     let flat = flattened(page)
     var visible = page
@@ -247,6 +250,70 @@ enum PagePrep {
 
   /// The page in a photo or frame as tl, tr, br, bl normalized with the origin at the
   /// top left: Vision's document segmentation first, its rectangle detector second.
+  /// Clockwise quarter turns (0 to 3) that make the page inside [quad] of the
+  /// photo at [path] upright, from the direction of its text.
+  ///
+  /// Vision reads text in any orientation and returns each line with its corners
+  /// in the text's own frame, so a line's top edge (top left to top right) points
+  /// the way the line runs. The lines vote, weighted by length; the winning
+  /// direction says how the page lies. 0 for a page without enough text.
+  static func uprightTurns(path: String, quad: [Double]) -> [String: Any] {
+    guard quad.count == 8,
+      let photo = CIImage(contentsOf: URL(fileURLWithPath: path), options: [.applyOrientationProperty: true])
+    else { return ["turns": 0] }
+    var page = warp(photo, quad: quad)
+    let long = max(page.extent.width, page.extent.height)
+    if long > 1200 {
+      page = page.applyingFilter(
+        "CILanczosScaleTransform", parameters: [kCIInputScaleKey: 1200 / long, kCIInputAspectRatioKey: 1])
+    }
+    page = normalized(page).applyingFilter("CIColorControls", parameters: [kCIInputSaturationKey: 0])
+    guard let image = context.createCGImage(page, from: page.extent) else { return ["turns": 0] }
+    let w = CGFloat(image.width)
+    let h = CGFloat(image.height)
+
+    let read = VNRecognizeTextRequest()
+    read.recognitionLevel = .accurate
+    read.usesLanguageCorrection = false
+    let supported = (try? read.supportedRecognitionLanguages()) ?? []
+    read.recognitionLanguages = ["ar-SA", "en-US"].filter { supported.contains($0) }
+    try? VNImageRequestHandler(cgImage: image, options: [:]).perform([read])
+    // Votes for where the text runs, in image pixels with y down: right means
+    // upright; down, left and up mean the page lies turned.
+    var votes = [0.0, 0.0, 0.0, 0.0]  // right, down, left, up
+    var lines = 0
+    for line in read.results ?? [] {
+      guard let text = line.topCandidates(1).first?.string, text.count >= 3 else { continue }
+      let dx = Double((line.topRight.x - line.topLeft.x) * w)
+      let dy = Double(-(line.topRight.y - line.topLeft.y) * h)  // Vision's y runs up.
+      let length = (dx * dx + dy * dy).squareRoot()
+      guard length > 8 else { continue }
+      lines += 1
+      if abs(dx) >= abs(dy) {
+        votes[dx > 0 ? 0 : 2] += length
+      } else {
+        votes[dy > 0 ? 1 : 3] += length
+      }
+    }
+    let total = votes.reduce(0, +)
+    guard lines >= 3, let top = votes.indices.max(by: { votes[$0] < votes[$1] }), votes[top] > total * 0.6
+    else { return ["turns": 0, "lines": lines, "votes": votes] }
+    // Text running down: the page lies turned a quarter clockwise, so it needs
+    // three more; running left: upside down; running up: one.
+    let turns = [0, 3, 2, 1][top]
+    return ["turns": turns, "lines": lines, "votes": votes]
+  }
+
+  /// How an image needing [turns] clockwise quarter turns is stored.
+  static func orientation(_ turns: Int) -> CGImagePropertyOrientation {
+    switch turns % 4 {
+    case 1: return .right
+    case 2: return .down
+    case 3: return .left
+    default: return .up
+    }
+  }
+
   static func page(in handler: VNImageRequestHandler) -> [Double]? {
     let doc = VNDetectDocumentSegmentationRequest()
     let rect = VNDetectRectanglesRequest()

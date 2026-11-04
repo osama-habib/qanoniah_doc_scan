@@ -11,8 +11,8 @@ import Vision
 ///   with the bundled tessdata_fast models (iOS 15 to 17 have no Arabic in Vision;
 ///   owner decision 2026-11-03).
 /// - `detectRectangle`: Vision's rectangle detector on a live luminance frame.
-/// - `renderText` (channel `qanoniah_doc_scan/pdf`): the text-form PDF, see
-///   [TextPdfRenderer].
+/// - `renderText`, `renderPlaced` (channel `qanoniah_doc_scan/pdf`): the
+///   text-form PDF, see [TextPdfRenderer].
 public class QanoniahDocScanPlugin: NSObject, FlutterPlugin {
   private let recognitionQueue = DispatchQueue(label: "qanoniah_doc_scan.recognition", qos: .userInitiated)
   private let frameQueue = DispatchQueue(label: "qanoniah_doc_scan.frames", qos: .userInitiated)
@@ -69,15 +69,24 @@ public class QanoniahDocScanPlugin: NSObject, FlutterPlugin {
           }
         }
       }
+    case "uprightTurns":
+      guard let path = args["path"] as? String, let quad = args["quad"] as? [Double] else {
+        return result(FlutterMethodNotImplemented)
+      }
+      frameQueue.async {
+        let turns = PagePrep.uprightTurns(path: path, quad: quad)
+        DispatchQueue.main.async { result(turns) }
+      }
     case "detectRectangleInPhoto":
       guard let path = args["path"] as? String else { return result(FlutterMethodNotImplemented) }
       frameQueue.async {
         let corners = Self.detectRectangle(inPhotoAt: path)
         DispatchQueue.main.async { result(corners) }
       }
-    case "renderText":
+    case "renderText", "renderPlaced":
+      let placed = call.method == "renderPlaced"
       recognitionQueue.async {
-        let data = TextPdfRenderer.render(args)
+        let data = placed ? TextPdfRenderer.renderPlaced(args) : TextPdfRenderer.render(args)
         DispatchQueue.main.async {
           if let data = data {
             result(FlutterStandardTypedData(bytes: data))

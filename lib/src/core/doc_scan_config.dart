@@ -18,6 +18,7 @@ class DocScanConfig {
     this.fileNumber = 1,
     this.maxFileBytes = 5 * 1024 * 1024,
     this.maxPages,
+    this.recognizeText = false,
   }) : assert(fileNumber > 0),
        assert(maxFileBytes > 0),
        assert(maxPages == null || maxPages > 0);
@@ -47,4 +48,9 @@ class DocScanConfig {
 
   /// Null means no page limit (FR-009).
   final int? maxPages;
+
+  /// Text recognition (OCR) and the text view and text PDF it feeds. Off for now
+  /// (owner decision 2026-11-04): the flow is capture, rotation, crop and one
+  /// filter, and attaches the photos as a PDF.
+  final bool recognizeText;
 }

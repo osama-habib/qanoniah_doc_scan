@@ -13,6 +13,9 @@ import '../../core/doc_scan_result.dart';
 import '../../core/failures.dart';
 import '../../core/session/document_edits.dart';
 import '../../core/session/scan_session.dart';
+import '../../core/session/word_placement.dart';
+import '../../recognition/data/post_processor.dart';
+import 'page_background.dart';
 import 'text_pdf_renderer.dart';
 
 export 'text_pdf_renderer.dart' show PdfTextBlock;
@@ -75,9 +78,10 @@ class PdfLook {
 ///
 /// - Image form: each prepared photo full bleed, with the recognized text drawn
 ///   invisibly at the word boxes so the file is searchable.
-/// - Text form: pages laid out from the final text only; no photos, so redacted
-///   content cannot survive in pixels, and redacted characters never reach the PDF
-///   (FR-041, FR-042).
+/// - Text form: each page as printed (revised 2026-11-04): its background (the
+///   scan with every redrawn, redacted or rewritten word erased from its pixels)
+///   under the final text drawn in place. Redacted characters never reach the PDF,
+///   and redacted words leave no pixels behind (FR-041, FR-042).
 class PdfBuilder {
   const PdfBuilder({TextPdfRenderer textRenderer = const PdfPackageTextRenderer()}) : _textRenderer = textRenderer;
 
@@ -127,6 +131,55 @@ class PdfBuilder {
     }
   }
 
+  /// A page as printed: A4 wide in points, its own height; its background
+  /// without the words that are drawn or edited away.
+  static Future<PdfPlacedPage?> _placed(CapturedPage page, DocumentEdits edits, File bgFile) async {
+    final PageBackgroundImage? bg = await PageBackground.forPage(page, edits: edits, out: bgFile, jpeg: true);
+    if (bg == null) return null;
+    final double k = 595 / bg.width;
+    Rect pt(Rect r) => Rect.fromLTRB(r.left * k, r.top * k, r.right * k, r.bottom * k);
+    final List<PdfPlaced> items = <PdfPlaced>[];
+    final RecognitionState r = page.recognition;
+    if (r is RecognitionDone) {
+      // Text coordinates are the recognized image's, the background's size.
+      final double tk = r.text.width > 0 ? bg.width / r.text.width : 1;
+      Rect at(Rect b) => pt(Rect.fromLTRB(b.left * tk, b.top * tk, b.right * tk, b.bottom * tk));
+      for (final Paragraph p in r.text.paragraphs) {
+        if (p.words.isEmpty) continue;
+        final ParagraphKey key = (page.id, p.id);
+        final Rect box = at(p.words.map((Word w) => w.box).reduce((Rect a, Rect b) => a.expandToInclude(b)));
+        if (edits.isParagraphRedacted(key)) {
+          items.add(PdfPlacedBar(box, paragraph: true));
+          continue;
+        }
+        final String? replaced = edits.replacements[key];
+        if (replaced != null) {
+          final List<double> ems = p.words.map((Word w) => w.em).toList()..sort();
+          items.add(PdfPlacedFlow(box, text: replaced, em: ems[ems.length ~/ 2] * tk * k, rtl: !p.mostlyLatin));
+          continue;
+        }
+        for (int i = 0; i < p.words.length; i++) {
+          final Word w = p.words[i];
+          if (edits.isWordRedacted(key, i)) {
+            items.add(PdfPlacedBar(at(w.box)));
+          } else if (w.drawable) {
+            items.add(
+              PdfPlacedWord(
+                at(w.box),
+                text: w.text,
+                em: w.em * tk * k,
+                baseline: w.baselineY * tk * k,
+                bold: w.bold,
+                rtl: PostProcessor.hasArabic(w.text),
+              ),
+            );
+          }
+        }
+      }
+    }
+    return PdfPlacedPage(width: 595, height: bg.height * k, background: await bg.file.readAsBytes(), items: items);
+  }
+
   Future<Either<BuildFailure, BuildOutput>> buildText({
     required List<CapturedPage> pages,
     required DocumentEdits edits,
@@ -134,21 +187,17 @@ class PdfBuilder {
     required File out,
   }) async {
     try {
-      final List<List<PdfTextBlock>> content = <List<PdfTextBlock>>[
-        for (final CapturedPage p in pages)
-          switch (p.recognition) {
-            RecognitionDone(:final PageText text) => <PdfTextBlock>[
-              for (final Paragraph para in text.paragraphs)
-                PdfTextBlock.of(
-                  para,
-                  edits.finalSegments(p.id, para),
-                  rtl: text.language == RecognitionLanguage.ar,
-                ),
-            ],
-            _ => const <PdfTextBlock>[],
-          },
-      ];
-      final Uint8List bytes = await _textRenderer.render(content, look);
+      final List<PdfPlacedPage> placed = <PdfPlacedPage>[];
+      for (int i = 0; i < pages.length; i++) {
+        final PdfPlacedPage? page = await _placed(pages[i], edits, File('${out.path}.bg$i.jpg'));
+        if (page == null) throw StateError('Page ${i + 1} could not be read.');
+        placed.add(page);
+      }
+      final Uint8List bytes = await _textRenderer.renderPlaced(placed, look);
+      for (int i = 0; i < pages.length; i++) {
+        final File bg = File('${out.path}.bg$i.jpg');
+        if (bg.existsSync()) bg.deleteSync();
+      }
       await out.writeAsBytes(bytes, flush: true);
       return Right<BuildFailure, BuildOutput>(
         BuildOutput(file: out, form: DocScanPdfForm.text, sizeBytes: bytes.length, compressed: false),
@@ -162,7 +211,6 @@ class PdfBuilder {
 
   static BuildFailure _storage(FileSystemException e) =>
       e.osError?.errorCode == 28 ? const BuildFailure.storageFull() : const BuildFailure.unknown();
-
 }
 
 class _ImagePage {

@@ -48,6 +48,7 @@ class DocScanStrings {
     required this.cornersHint,
     required this.savePage,
     required this.retake,
+    required this.rotate,
     required this.filtersTitle,
     required this.filtersPanelTitle,
     required this.next,
@@ -140,6 +141,9 @@ class DocScanStrings {
   final String cornersHint;
   final String savePage;
   final String retake;
+
+  /// «تدوير»: a quarter turn of the page on the corner step.
+  final String rotate;
   final String filtersTitle;
 
   /// «الفلاتر», the filter strip's heading on «توضيح الصفحات».
@@ -259,6 +263,7 @@ class DocScanStrings {
       cornersHint: 'يمكنك ضبط حدود الصفحة بسحب الزوايا',
       savePage: 'حفظ الصفحة',
       retake: 'إعادة الالتقاط',
+      rotate: 'تدوير',
       filtersTitle: 'توضيح الصفحات',
       filtersPanelTitle: 'الفلاتر',
       next: 'التالي',
@@ -266,7 +271,7 @@ class DocScanStrings {
       saveCount: (int n) => 'حفظ ($n)',
       pageShort: (int n) => 'صفحة $n',
       allPages: 'كل الصفحات',
-      filtersHint: 'يمكن الجمع بين أكثر من فلتر لتوضيح النص، وتُقرأ الصفحة بعد التحسين بدقة أعلى.',
+      filtersHint: 'اختر فلترًا واحدًا لتوضيح الصفحة.',
       filterOriginal: 'الأصل',
       filterAuto: 'تحسين تلقائي',
       filterText: 'إبراز النص',
@@ -357,6 +362,7 @@ class DocScanStrings {
       cornersHint: 'Drag the corners to adjust the page edges',
       savePage: 'Save page',
       retake: 'Retake',
+      rotate: 'Rotate',
       filtersTitle: 'Enhance pages',
       filtersPanelTitle: 'Filters',
       next: 'Next',
@@ -364,7 +370,7 @@ class DocScanStrings {
       saveCount: (int n) => 'Save ($n)',
       pageShort: (int n) => 'Page $n',
       allPages: 'All pages',
-      filtersHint: 'Combine filters to make text clearer. The page is read more accurately after enhancing.',
+      filtersHint: 'Choose one filter to make the page clearer.',
       filterOriginal: 'Original',
       filterAuto: 'Auto enhance',
       filterText: 'Sharpen text',
@@ -450,6 +456,7 @@ class DocScanStrings {
     String? cornersHint,
     String? savePage,
     String? retake,
+    String? rotate,
     String? filtersTitle,
     String? filtersPanelTitle,
     String? next,
@@ -539,6 +546,7 @@ class DocScanStrings {
       cornersHint: cornersHint ?? this.cornersHint,
       savePage: savePage ?? this.savePage,
       retake: retake ?? this.retake,
+      rotate: rotate ?? this.rotate,
       filtersTitle: filtersTitle ?? this.filtersTitle,
       filtersPanelTitle: filtersPanelTitle ?? this.filtersPanelTitle,
       next: next ?? this.next,

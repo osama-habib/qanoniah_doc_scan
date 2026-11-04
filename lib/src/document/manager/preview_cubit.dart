@@ -11,6 +11,7 @@ import '../../core/failures.dart';
 import '../../core/session/document_edits.dart';
 import '../../core/session/scan_session.dart';
 import '../../core/session/scan_session_repo.dart';
+import '../data/page_background.dart';
 import '../data/pdf_builder.dart';
 import '../data/size_fitter.dart';
 
@@ -58,6 +59,10 @@ abstract class PreviewState with _$PreviewState {
     WordSelection? selection,
     @Default(false) bool attaching,
     BuildFailure? failure,
+
+    /// Each recognized page's background (the scan without its recognized words),
+    /// by page id, once built.
+    @Default(<String, File>{}) Map<String, File> backgrounds,
   }) = _PreviewState;
 
   DocScanPdfForm get form => edits.isDirty ? DocScanPdfForm.text : DocScanPdfForm.image;
@@ -103,6 +108,17 @@ class PreviewCubit extends Cubit<PreviewState> {
          ),
        ) {
     _onEvent(DocScanEvent.previewOpened());
+    unawaited(_buildBackgrounds());
+  }
+
+  /// The text view draws each page as printed over its background.
+  Future<void> _buildBackgrounds() async {
+    for (final CapturedPage p in state.pages) {
+      if (p.recognition is! RecognitionDone) continue;
+      final PageBackgroundImage? bg = await PageBackground.forPage(p, out: _sessions.newFile('png'));
+      if (isClosed) return;
+      if (bg != null) emit(state.copyWith(backgrounds: <String, File>{...state.backgrounds, p.id: bg.file}));
+    }
   }
 
   final ScanSessionRepo _sessions;
@@ -170,9 +186,7 @@ class PreviewCubit extends Cubit<PreviewState> {
 
   void toggleParagraphRedaction(String pageId, String paragraphId) {
     final ParagraphKey key = (pageId, paragraphId);
-    _onEvent(
-      state.edits.isParagraphRedacted(key) ? DocScanEvent.redactionRemoved() : DocScanEvent.paragraphRedacted(),
-    );
+    _onEvent(state.edits.isParagraphRedacted(key) ? DocScanEvent.redactionRemoved() : DocScanEvent.paragraphRedacted());
     _setEdits(state.edits.toggleParagraph(key));
   }
 
@@ -197,12 +211,7 @@ class PreviewCubit extends Cubit<PreviewState> {
     _estimate?.cancel();
     final Either<BuildFailure, BuildOutput> r;
     if (state.edits.isDirty) {
-      r = await _builder.buildText(
-        pages: state.pages,
-        edits: state.edits,
-        look: _look,
-        out: _sessions.newFile('pdf'),
-      );
+      r = await _builder.buildText(pages: state.pages, edits: state.edits, look: _look, out: _sessions.newFile('pdf'));
     } else if (state.colorMode != ScanColorMode.color) {
       r = await _fitter.fitImage(
         pages: state.pages,
@@ -243,8 +252,12 @@ class PreviewCubit extends Cubit<PreviewState> {
     }
     _estimate = Timer(estimateDelay, () async {
       final File out = _estimateFile ??= _sessions.newFile('pdf');
-      final Either<BuildFailure, BuildOutput> r =
-          await _builder.buildText(pages: state.pages, edits: state.edits, look: _look, out: out);
+      final Either<BuildFailure, BuildOutput> r = await _builder.buildText(
+        pages: state.pages,
+        edits: state.edits,
+        look: _look,
+        out: out,
+      );
       if (!isClosed) r.fold((BuildFailure _) {}, (BuildOutput o) => emit(state.copyWith(sizeBytes: o.sizeBytes)));
     });
   }

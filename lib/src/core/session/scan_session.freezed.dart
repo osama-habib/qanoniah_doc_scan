@@ -222,6 +222,9 @@ mixin _$Word {
   String get text => throw _privateConstructorUsedError;
   Rect get box => throw _privateConstructorUsedError;
   double get confidence => throw _privateConstructorUsedError;
+  double get size => throw _privateConstructorUsedError;
+  double get baseline => throw _privateConstructorUsedError;
+  bool get bold => throw _privateConstructorUsedError;
 
   /// Create a copy of Word
   /// with the given fields replaced by the non-null parameter values.
@@ -234,7 +237,14 @@ abstract class $WordCopyWith<$Res> {
   factory $WordCopyWith(Word value, $Res Function(Word) then) =
       _$WordCopyWithImpl<$Res, Word>;
   @useResult
-  $Res call({String text, Rect box, double confidence});
+  $Res call({
+    String text,
+    Rect box,
+    double confidence,
+    double size,
+    double baseline,
+    bool bold,
+  });
 }
 
 /// @nodoc
@@ -255,6 +265,9 @@ class _$WordCopyWithImpl<$Res, $Val extends Word>
     Object? text = null,
     Object? box = null,
     Object? confidence = null,
+    Object? size = null,
+    Object? baseline = null,
+    Object? bold = null,
   }) {
     return _then(
       _value.copyWith(
@@ -270,6 +283,18 @@ class _$WordCopyWithImpl<$Res, $Val extends Word>
                 ? _value.confidence
                 : confidence // ignore: cast_nullable_to_non_nullable
                       as double,
+            size: null == size
+                ? _value.size
+                : size // ignore: cast_nullable_to_non_nullable
+                      as double,
+            baseline: null == baseline
+                ? _value.baseline
+                : baseline // ignore: cast_nullable_to_non_nullable
+                      as double,
+            bold: null == bold
+                ? _value.bold
+                : bold // ignore: cast_nullable_to_non_nullable
+                      as bool,
           )
           as $Val,
     );
@@ -284,7 +309,14 @@ abstract class _$$WordImplCopyWith<$Res> implements $WordCopyWith<$Res> {
   ) = __$$WordImplCopyWithImpl<$Res>;
   @override
   @useResult
-  $Res call({String text, Rect box, double confidence});
+  $Res call({
+    String text,
+    Rect box,
+    double confidence,
+    double size,
+    double baseline,
+    bool bold,
+  });
 }
 
 /// @nodoc
@@ -302,6 +334,9 @@ class __$$WordImplCopyWithImpl<$Res>
     Object? text = null,
     Object? box = null,
     Object? confidence = null,
+    Object? size = null,
+    Object? baseline = null,
+    Object? bold = null,
   }) {
     return _then(
       _$WordImpl(
@@ -317,6 +352,18 @@ class __$$WordImplCopyWithImpl<$Res>
             ? _value.confidence
             : confidence // ignore: cast_nullable_to_non_nullable
                   as double,
+        size: null == size
+            ? _value.size
+            : size // ignore: cast_nullable_to_non_nullable
+                  as double,
+        baseline: null == baseline
+            ? _value.baseline
+            : baseline // ignore: cast_nullable_to_non_nullable
+                  as double,
+        bold: null == bold
+            ? _value.bold
+            : bold // ignore: cast_nullable_to_non_nullable
+                  as bool,
       ),
     );
   }
@@ -329,6 +376,9 @@ class _$WordImpl implements _Word {
     required this.text,
     required this.box,
     required this.confidence,
+    this.size = 0.0,
+    this.baseline = 0.0,
+    this.bold = false,
   });
 
   @override
@@ -337,10 +387,19 @@ class _$WordImpl implements _Word {
   final Rect box;
   @override
   final double confidence;
+  @override
+  @JsonKey()
+  final double size;
+  @override
+  @JsonKey()
+  final double baseline;
+  @override
+  @JsonKey()
+  final bool bold;
 
   @override
   String toString() {
-    return 'Word(text: $text, box: $box, confidence: $confidence)';
+    return 'Word(text: $text, box: $box, confidence: $confidence, size: $size, baseline: $baseline, bold: $bold)';
   }
 
   @override
@@ -351,11 +410,16 @@ class _$WordImpl implements _Word {
             (identical(other.text, text) || other.text == text) &&
             (identical(other.box, box) || other.box == box) &&
             (identical(other.confidence, confidence) ||
-                other.confidence == confidence));
+                other.confidence == confidence) &&
+            (identical(other.size, size) || other.size == size) &&
+            (identical(other.baseline, baseline) ||
+                other.baseline == baseline) &&
+            (identical(other.bold, bold) || other.bold == bold));
   }
 
   @override
-  int get hashCode => Object.hash(runtimeType, text, box, confidence);
+  int get hashCode =>
+      Object.hash(runtimeType, text, box, confidence, size, baseline, bold);
 
   /// Create a copy of Word
   /// with the given fields replaced by the non-null parameter values.
@@ -371,6 +435,9 @@ abstract class _Word implements Word {
     required final String text,
     required final Rect box,
     required final double confidence,
+    final double size,
+    final double baseline,
+    final bool bold,
   }) = _$WordImpl;
 
   @override
@@ -379,6 +446,12 @@ abstract class _Word implements Word {
   Rect get box;
   @override
   double get confidence;
+  @override
+  double get size;
+  @override
+  double get baseline;
+  @override
+  bool get bold;
 
   /// Create a copy of Word
   /// with the given fields replaced by the non-null parameter values.
@@ -1662,6 +1735,10 @@ mixin _$CapturedPage {
   Quad get corners => throw _privateConstructorUsedError;
   Set<PageFilter> get filters => throw _privateConstructorUsedError;
 
+  /// Clockwise quarter turns from the straightened photo to the upright page
+  /// (0 to 3), found on capture or set with «تدوير» (revised 2026-11-04).
+  int get turns => throw _privateConstructorUsedError;
+
   /// Warped and filtered image the user sees; the image-form PDF page.
   File get preparedFile => throw _privateConstructorUsedError;
 
@@ -1689,6 +1766,7 @@ abstract class $CapturedPageCopyWith<$Res> {
     File rawFile,
     Quad corners,
     Set<PageFilter> filters,
+    int turns,
     File preparedFile,
     File ocrInputFile,
     RecognitionState recognition,
@@ -1717,6 +1795,7 @@ class _$CapturedPageCopyWithImpl<$Res, $Val extends CapturedPage>
     Object? rawFile = null,
     Object? corners = null,
     Object? filters = null,
+    Object? turns = null,
     Object? preparedFile = null,
     Object? ocrInputFile = null,
     Object? recognition = null,
@@ -1739,6 +1818,10 @@ class _$CapturedPageCopyWithImpl<$Res, $Val extends CapturedPage>
                 ? _value.filters
                 : filters // ignore: cast_nullable_to_non_nullable
                       as Set<PageFilter>,
+            turns: null == turns
+                ? _value.turns
+                : turns // ignore: cast_nullable_to_non_nullable
+                      as int,
             preparedFile: null == preparedFile
                 ? _value.preparedFile
                 : preparedFile // ignore: cast_nullable_to_non_nullable
@@ -1791,6 +1874,7 @@ abstract class _$$CapturedPageImplCopyWith<$Res>
     File rawFile,
     Quad corners,
     Set<PageFilter> filters,
+    int turns,
     File preparedFile,
     File ocrInputFile,
     RecognitionState recognition,
@@ -1820,6 +1904,7 @@ class __$$CapturedPageImplCopyWithImpl<$Res>
     Object? rawFile = null,
     Object? corners = null,
     Object? filters = null,
+    Object? turns = null,
     Object? preparedFile = null,
     Object? ocrInputFile = null,
     Object? recognition = null,
@@ -1842,6 +1927,10 @@ class __$$CapturedPageImplCopyWithImpl<$Res>
             ? _value._filters
             : filters // ignore: cast_nullable_to_non_nullable
                   as Set<PageFilter>,
+        turns: null == turns
+            ? _value.turns
+            : turns // ignore: cast_nullable_to_non_nullable
+                  as int,
         preparedFile: null == preparedFile
             ? _value.preparedFile
             : preparedFile // ignore: cast_nullable_to_non_nullable
@@ -1867,6 +1956,7 @@ class _$CapturedPageImpl implements _CapturedPage {
     required this.rawFile,
     required this.corners,
     required final Set<PageFilter> filters,
+    this.turns = 0,
     required this.preparedFile,
     required this.ocrInputFile,
     required this.recognition,
@@ -1888,6 +1978,12 @@ class _$CapturedPageImpl implements _CapturedPage {
     return EqualUnmodifiableSetView(_filters);
   }
 
+  /// Clockwise quarter turns from the straightened photo to the upright page
+  /// (0 to 3), found on capture or set with «تدوير» (revised 2026-11-04).
+  @override
+  @JsonKey()
+  final int turns;
+
   /// Warped and filtered image the user sees; the image-form PDF page.
   @override
   final File preparedFile;
@@ -1901,7 +1997,7 @@ class _$CapturedPageImpl implements _CapturedPage {
 
   @override
   String toString() {
-    return 'CapturedPage(id: $id, rawFile: $rawFile, corners: $corners, filters: $filters, preparedFile: $preparedFile, ocrInputFile: $ocrInputFile, recognition: $recognition)';
+    return 'CapturedPage(id: $id, rawFile: $rawFile, corners: $corners, filters: $filters, turns: $turns, preparedFile: $preparedFile, ocrInputFile: $ocrInputFile, recognition: $recognition)';
   }
 
   @override
@@ -1913,6 +2009,7 @@ class _$CapturedPageImpl implements _CapturedPage {
             (identical(other.rawFile, rawFile) || other.rawFile == rawFile) &&
             (identical(other.corners, corners) || other.corners == corners) &&
             const DeepCollectionEquality().equals(other._filters, _filters) &&
+            (identical(other.turns, turns) || other.turns == turns) &&
             (identical(other.preparedFile, preparedFile) ||
                 other.preparedFile == preparedFile) &&
             (identical(other.ocrInputFile, ocrInputFile) ||
@@ -1928,6 +2025,7 @@ class _$CapturedPageImpl implements _CapturedPage {
     rawFile,
     corners,
     const DeepCollectionEquality().hash(_filters),
+    turns,
     preparedFile,
     ocrInputFile,
     recognition,
@@ -1948,6 +2046,7 @@ abstract class _CapturedPage implements CapturedPage {
     required final File rawFile,
     required final Quad corners,
     required final Set<PageFilter> filters,
+    final int turns,
     required final File preparedFile,
     required final File ocrInputFile,
     required final RecognitionState recognition,
@@ -1963,6 +2062,11 @@ abstract class _CapturedPage implements CapturedPage {
   Quad get corners;
   @override
   Set<PageFilter> get filters;
+
+  /// Clockwise quarter turns from the straightened photo to the upright page
+  /// (0 to 3), found on capture or set with «تدوير» (revised 2026-11-04).
+  @override
+  int get turns;
 
   /// Warped and filtered image the user sees; the image-form PDF page.
   @override

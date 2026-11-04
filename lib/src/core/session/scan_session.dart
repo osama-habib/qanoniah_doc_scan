@@ -49,12 +49,19 @@ abstract class Quad with _$Quad {
 }
 
 /// One recognized word with its box in image pixels.
+///
+/// After the ink pass (revised 2026-11-04) the box is tight to the word's ink, and
+/// [size] and [baseline] place it as printed: the font size (em) and the baseline's
+/// y, both in image pixels, shared by every word of its printed line. 0 when unknown.
 @freezed
 abstract class Word with _$Word {
   const factory Word({
     required String text,
     required Rect box,
     required double confidence,
+    @Default(0.0) double size,
+    @Default(0.0) double baseline,
+    @Default(false) bool bold,
   }) = _Word;
 }
 
@@ -148,6 +155,10 @@ abstract class CapturedPage with _$CapturedPage {
     required File rawFile,
     required Quad corners,
     required Set<PageFilter> filters,
+
+    /// Clockwise quarter turns from the straightened photo to the upright page
+    /// (0 to 3), found on capture or set with «تدوير» (revised 2026-11-04).
+    @Default(0) int turns,
 
     /// Warped and filtered image the user sees; the image-form PDF page.
     required File preparedFile,

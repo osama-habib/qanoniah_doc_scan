@@ -28,7 +28,7 @@ class ReviewScreen extends StatelessWidget {
     required this.onAddPage,
     required this.onRetakeLast,
     required this.onOpenFilters,
-    required this.onBuild,
+    this.onBuild,
     required this.onAttachImages,
     required this.onEmpty,
   });
@@ -50,8 +50,9 @@ class ReviewScreen extends StatelessWidget {
   // TODO(unused): the design's tiles open no filters; back opens them.
   final void Function(int index) onOpenFilters;
 
-  /// «إنشاء مستند قابل للتعديل»: build with recognized text.
-  final VoidCallback onBuild;
+  /// «إنشاء مستند قابل للتعديل»: build with recognized text. Null without text
+  /// recognition: only «إرفاق كملف PDF» shows.
+  final VoidCallback? onBuild;
 
   /// «إرفاق كملف PDF»: the photos as one PDF, straight to the preview.
   final VoidCallback onAttachImages;
@@ -110,9 +111,12 @@ class ReviewScreen extends StatelessWidget {
                   ),
                   child: Column(
                     children: <Widget>[
-                      ScanPrimaryButton(label: s.buildDocument, onPressed: enabled ? onBuild : null),
-                      const SizedBox(height: 10),
-                      ScanSecondaryButton(label: s.attach, onPressed: enabled ? onAttachImages : null),
+                      if (onBuild != null) ...<Widget>[
+                        ScanPrimaryButton(label: s.buildDocument, onPressed: enabled ? onBuild : null),
+                        const SizedBox(height: 10),
+                        ScanSecondaryButton(label: s.attach, onPressed: enabled ? onAttachImages : null),
+                      ] else
+                        ScanPrimaryButton(label: s.attach, onPressed: enabled ? onAttachImages : null),
                     ],
                   ),
                 ),

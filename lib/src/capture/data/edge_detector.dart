@@ -77,6 +77,10 @@ abstract interface class EdgeDetector {
   /// Run once per capture on the full-resolution still, so the warp uses the
   /// most precise edges, like a scanner (FR-005).
   Future<Quad?> detectInPhoto(File photo);
+
+  /// Clockwise quarter turns (0 to 3) that make the page inside [corners] of
+  /// [photo] upright, read from the direction of its text. 0 when unsure.
+  Future<int> uprightTurns(File photo, Quad corners);
   Future<void> dispose();
 }
 
@@ -93,11 +97,7 @@ class DartEdgeDetector implements EdgeDetector {
 
   final double minAreaRatio;
   bool _busy = false;
-  FrameAnalysis _last = const FrameAnalysis(
-    quad: null,
-    sharpness: 0,
-    luminance: 0,
-  );
+  FrameAnalysis _last = const FrameAnalysis(quad: null, sharpness: 0, luminance: 0);
 
   @override
   Future<FrameAnalysis> analyze(CameraFrame frame) async {
@@ -121,6 +121,10 @@ class DartEdgeDetector implements EdgeDetector {
     final double ratio = minAreaRatio;
     return Isolate.run(() => detectInPhotoFile(path, ratio));
   }
+
+  /// No text reading in Dart: the page keeps the camera's orientation.
+  @override
+  Future<int> uprightTurns(File photo, Quad corners) async => 0;
 
   @override
   Future<void> dispose() async {}
@@ -150,19 +154,14 @@ Quad? detectInPhotoFile(String path, double minAreaRatio) {
 /// when the channel is unavailable.
 class VisionEdgeDetector implements EdgeDetector {
   VisionEdgeDetector({MethodChannel? channel, DartEdgeDetector? fallback})
-    : _channel =
-          channel ?? const MethodChannel('qanoniah_doc_scan/recognition'),
+    : _channel = channel ?? const MethodChannel('qanoniah_doc_scan/recognition'),
       _fallback = fallback ?? DartEdgeDetector();
 
   final MethodChannel _channel;
   final DartEdgeDetector _fallback;
   bool _busy = false;
   bool _useFallback = false;
-  FrameAnalysis _last = const FrameAnalysis(
-    quad: null,
-    sharpness: 0,
-    luminance: 0,
-  );
+  FrameAnalysis _last = const FrameAnalysis(quad: null, sharpness: 0, luminance: 0);
 
   @override
   Future<FrameAnalysis> analyze(CameraFrame frame) async {
@@ -180,9 +179,7 @@ class VisionEdgeDetector implements EdgeDetector {
       Quad? quad;
       if (corners != null && corners.length == 8) {
         final List<double> c = corners.map((Object? v) => (v as num?)?.toDouble() ?? 0).toList();
-        quad = orderCorners(<Offset>[
-          for (int i = 0; i < 8; i += 2) Offset(c[i], c[i + 1]),
-        ]);
+        quad = orderCorners(<Offset>[for (int i = 0; i < 8; i += 2) Offset(c[i], c[i + 1])]);
       }
       return _last = FrameAnalysis(
         quad: quad,
@@ -213,13 +210,36 @@ class VisionEdgeDetector implements EdgeDetector {
       );
       if (corners == null || corners.length != 8) return _fallback.detectInPhoto(photo);
       final List<double> c = corners.map((Object? v) => (v as num?)?.toDouble() ?? 0).toList();
-      return orderCorners(<Offset>[
-        for (int i = 0; i < 8; i += 2) Offset(c[i], c[i + 1]),
-      ]);
+      return orderCorners(<Offset>[for (int i = 0; i < 8; i += 2) Offset(c[i], c[i + 1])]);
     } on MissingPluginException {
       return _fallback.detectInPhoto(photo);
     } on PlatformException {
       return _fallback.detectInPhoto(photo);
+    }
+  }
+
+  /// What the platform measured for the last [uprightTurns] (for diagnostics).
+  @visibleForTesting
+  Map<Object?, Object?>? lastUprightDetails;
+
+  /// Vision reads the page's text in each of four orientations (iOS).
+  @override
+  Future<int> uprightTurns(File photo, Quad corners) async {
+    if (_useFallback) return 0;
+    try {
+      final Map<Object?, Object?>? res = await _channel.invokeMapMethod<Object?, Object?>('uprightTurns', <String, Object>{
+        'path': photo.path,
+        'quad': <double>[
+          corners.topLeft.dx, corners.topLeft.dy, corners.topRight.dx, corners.topRight.dy, //
+          corners.bottomRight.dx, corners.bottomRight.dy, corners.bottomLeft.dx, corners.bottomLeft.dy,
+        ],
+      });
+      lastUprightDetails = res;
+      return ((res?['turns'] as num?)?.toInt() ?? 0) % 4;
+    } on MissingPluginException {
+      return 0;
+    } on PlatformException {
+      return 0;
     }
   }
 
@@ -246,19 +266,11 @@ class VisionEdgeDetector implements EdgeDetector {
     }
   }
   final double mean = n == 0 ? 0 : sum / n;
-  return (
-    n == 0 ? 0 : sumSq / n - mean * mean,
-    g.isEmpty ? 0 : total / g.length,
-  );
+  return (n == 0 ? 0 : sumSq / n - mean * mean, g.isEmpty ? 0 : total / g.length);
 }
 
 /// The detection itself; synchronous so tests and the isolate share it.
-FrameAnalysis analyzeLuminance(
-  Uint8List bytes,
-  int width,
-  int height,
-  double minAreaRatio,
-) {
+FrameAnalysis analyzeLuminance(Uint8List bytes, int width, int height, double minAreaRatio) {
   final (double sharpness, double luminance) = frameStats(bytes, width, height);
 
   // A small copy: the page outline needs no detail.
@@ -318,12 +330,7 @@ FrameAnalysis analyzeLuminance(
       size++;
       final int x = i % sw;
       final int y = i ~/ sw;
-      for (final int j in <int>[
-        if (x > 0) i - 1,
-        if (x < sw - 1) i + 1,
-        if (y > 0) i - sw,
-        if (y < sh - 1) i + sw,
-      ]) {
+      for (final int j in <int>[if (x > 0) i - 1, if (x < sw - 1) i + 1, if (y > 0) i - sw, if (y < sh - 1) i + sw]) {
         if (label[j] == 0 && small[j] > threshold) {
           label[j] = next;
           stack.add(j);
@@ -338,14 +345,9 @@ FrameAnalysis analyzeLuminance(
 
   Quad? quad;
   if (bestSize >= sw * sh * minAreaRatio) {
-    Offset tl = const Offset(double.infinity, 0),
-        br = const Offset(-double.infinity, 0);
-    Offset tr = const Offset(-double.infinity, 0),
-        bl = const Offset(double.infinity, 0);
-    double tlS = double.infinity,
-        brS = -double.infinity,
-        trS = -double.infinity,
-        blS = double.infinity;
+    Offset tl = const Offset(double.infinity, 0), br = const Offset(-double.infinity, 0);
+    Offset tr = const Offset(-double.infinity, 0), bl = const Offset(double.infinity, 0);
+    double tlS = double.infinity, brS = -double.infinity, trS = -double.infinity, blS = double.infinity;
     for (int i = 0; i < label.length; i++) {
       if (label[i] != bestLabel) continue;
       final double x = (i % sw).toDouble();
@@ -376,14 +378,8 @@ FrameAnalysis analyzeLuminance(
             .abs();
     // The region must fill its quadrilateral, or it is not a page.
     if (area > 0 && bestSize / area >= 0.85 && area >= sw * sh * minAreaRatio) {
-      Offset n(Offset p) =>
-          Offset(p.dx / math.max(1, sw - 1), p.dy / math.max(1, sh - 1));
-      quad = Quad(
-        topLeft: n(tl),
-        topRight: n(tr),
-        bottomRight: n(br),
-        bottomLeft: n(bl),
-      );
+      Offset n(Offset p) => Offset(p.dx / math.max(1, sw - 1), p.dy / math.max(1, sh - 1));
+      quad = Quad(topLeft: n(tl), topRight: n(tr), bottomRight: n(br), bottomLeft: n(bl));
     }
   }
   return FrameAnalysis(

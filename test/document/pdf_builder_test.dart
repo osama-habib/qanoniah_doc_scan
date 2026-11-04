@@ -39,7 +39,7 @@ void main() {
     expect(text, contains(RegExp(r'/Subtype\s*/Image')));
   });
 
-  test('text form holds no images and is built from final segments only', () async {
+  test('text form is the page as printed: one background image, words from final segments only', () async {
     final CapturedPage p = pdfPage(tmp, 'a', <String>['يلتزم', 'SECRETWORD', 'بالسرية'], w: 300, h: 400);
     final DocumentEdits edits = const DocumentEdits().redactWords(('a', 'p0'), <int>[1]);
     final Either<BuildFailure, BuildOutput> r = await const PdfBuilder().buildText(
@@ -51,7 +51,8 @@ void main() {
     final BuildOutput o = r.getOrElse(() => fail('build failed'));
     expect(o.form, DocScanPdfForm.text);
     final String text = pdfText(o.file.readAsBytesSync());
-    expect(text, isNot(contains(RegExp(r'/Subtype\s*/Image'))));
+    // The background (the scan with its words erased) is the page's one image.
+    expect(RegExp(r'/Subtype\s*/Image').allMatches(text), hasLength(1));
     expect(text, isNot(contains('SECRETWORD')));
     expect(edits.finalText(p), isNot(contains('SECRETWORD')));
   });

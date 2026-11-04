@@ -37,22 +37,28 @@ class PagePreparer {
   final int maxLongEdge;
   final int jpegQuality;
 
-  /// Warps [raw] to [corners], applies [filters] in a fixed order, and writes the
-  /// visible page to [prepared] and the recognition input to [ocrInput].
+  /// Warps [raw] to [corners], turns it upright by [turns] clockwise quarter
+  /// turns, applies [filters] in a fixed order, and writes the visible page to
+  /// [prepared] and the recognition input to [ocrInput].
   Future<Either<StorageFailure, Unit>> prepare({
     required File raw,
     required Quad corners,
     required Set<PageFilter> filters,
     required File prepared,
     required File ocrInput,
+    int turns = 0,
+
+    /// A smaller page than [maxLongEdge] (filter previews).
+    int? longEdge,
   }) async {
+    final int quarter = turns % 4;
     final String rawPath = raw.path;
     final String preparedPath = prepared.path;
     final String ocrPath = ocrInput.path;
     final List<double> quad = _flatten(corners);
     final List<int> filterIndexes = filters.map((PageFilter f) => f.index).toList();
-    final int longEdge = maxLongEdge;
-    final int quality = jpegQuality;
+    final int edge = longEdge ?? maxLongEdge;
+    final int quality = longEdge == null ? jpegQuality : 75;
     if (native && !_nativeMissing) {
       try {
         await _channel.invokeMapMethod<String, Object?>('preparePage', <String, Object>{
@@ -61,8 +67,9 @@ class PagePreparer {
           'filters': filters.map((PageFilter f) => f.name).toList(),
           'prepared': preparedPath,
           'ocr': ocrPath,
-          'maxLongEdge': longEdge,
+          'maxLongEdge': edge,
           'quality': quality,
+          'turns': quarter,
         });
         return const Right<StorageFailure, Unit>(unit);
       } on MissingPluginException {
@@ -73,11 +80,9 @@ class PagePreparer {
     }
     try {
       final bool ok = await Isolate.run(
-        () => preparePage(rawPath, quad, filterIndexes, preparedPath, ocrPath, longEdge, quality),
+        () => preparePage(rawPath, quad, filterIndexes, preparedPath, ocrPath, edge, quality, turns: quarter),
       );
-      return ok
-          ? const Right<StorageFailure, Unit>(unit)
-          : const Left<StorageFailure, Unit>(StorageFailure.unknown());
+      return ok ? const Right<StorageFailure, Unit>(unit) : const Left<StorageFailure, Unit>(StorageFailure.unknown());
     } on FileSystemException catch (e) {
       return Left<StorageFailure, Unit>(
         e.osError?.errorCode == 28 ? const StorageFailure.full() : const StorageFailure.unknown(),
@@ -101,19 +106,23 @@ bool preparePage(
   String preparedPath,
   String ocrPath,
   int maxLongEdge,
-  int jpegQuality,
-) {
+  int jpegQuality, {
+  int turns = 0,
+}) {
   final img.Image? decoded = img.decodeImage(File(rawPath).readAsBytesSync());
   if (decoded == null) return false;
   final Set<PageFilter> filters = filterIndexes.map((int i) => PageFilter.values[i]).toSet();
 
   img.Image page = warp(img.bakeOrientation(decoded), quad, maxLongEdge);
+  if (turns % 4 != 0) page = img.copyRotate(page, angle: 90 * (turns % 4));
   if (filters.contains(PageFilter.removeShadows)) page = removeShadows(page);
   if (filters.contains(PageFilter.autoEnhance)) page = _sharpen(img.normalize(page, min: 0, max: 255), 0.5);
   if (filters.contains(PageFilter.highContrast)) page = img.contrast(page, contrast: 140);
   if (filters.contains(PageFilter.sharpenText)) page = _sharpen(page, 1.5);
   if (filters.contains(PageFilter.grayscale)) page = img.grayscale(page);
-  if (filters.contains(PageFilter.blackWhite)) page = _toImage(adaptiveThreshold(luminanceOf(page), page.width, page.height), page.width, page.height);
+  if (filters.contains(PageFilter.blackWhite)) {
+    page = _toImage(adaptiveThreshold(luminanceOf(page), page.width, page.height), page.width, page.height);
+  }
 
   // The JPEG encoder mishandles one-channel images: write black and white as RGB.
   final img.Image visible = page.numChannels == 1 ? page.convert(numChannels: 3) : page;
@@ -168,8 +177,11 @@ double? pageAspect(List<double> q, double w, double h) {
   final List<double> m2 = m(2); // tr
   final List<double> m3 = m(6); // bl
   final List<double> m4 = m(4); // br
-  List<double> cross(List<double> a, List<double> b) =>
-      <double>[a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  List<double> cross(List<double> a, List<double> b) => <double>[
+    a[1] * b[2] - a[2] * b[1],
+    a[2] * b[0] - a[0] * b[2],
+    a[0] * b[1] - a[1] * b[0],
+  ];
   double dot(List<double> a, List<double> b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
   final double d2 = dot(cross(m2, m4), m3);
   final double d3 = dot(cross(m3, m4), m2);
@@ -179,7 +191,8 @@ double? pageAspect(List<double> q, double w, double h) {
   final List<double> n2 = <double>[k2 * m2[0] - m1[0], k2 * m2[1] - m1[1], k2 * m2[2] - m1[2]];
   final List<double> n3 = <double>[k3 * m3[0] - m1[0], k3 * m3[1] - m1[1], k3 * m3[2] - m1[2]];
   final double fallback = 0.75 * math.max(w, h);
-  final double f2 = -((n2[0] * n3[0] - (n2[0] * n3[2] + n2[2] * n3[0]) * u0 + n2[2] * n3[2] * u0 * u0) +
+  final double f2 =
+      -((n2[0] * n3[0] - (n2[0] * n3[2] + n2[2] * n3[0]) * u0 + n2[2] * n3[2] * u0 * u0) +
           (n2[1] * n3[1] - (n2[1] * n3[2] + n2[2] * n3[1]) * v0 + n2[2] * n3[2] * v0 * v0)) /
       (n2[2] * n3[2] == 0 ? 1e-12 : n2[2] * n3[2]);
   // With an edge pair (almost) parallel its vanishing point is at infinity and the

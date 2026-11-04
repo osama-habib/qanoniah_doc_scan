@@ -229,6 +229,10 @@ mixin _$PreviewState {
   bool get attaching => throw _privateConstructorUsedError;
   BuildFailure? get failure => throw _privateConstructorUsedError;
 
+  /// Each recognized page's background (the scan without its recognized words),
+  /// by page id, once built.
+  Map<String, File> get backgrounds => throw _privateConstructorUsedError;
+
   /// Create a copy of PreviewState
   /// with the given fields replaced by the non-null parameter values.
   @JsonKey(includeFromJson: false, includeToJson: false)
@@ -255,6 +259,7 @@ abstract class $PreviewStateCopyWith<$Res> {
     WordSelection? selection,
     bool attaching,
     BuildFailure? failure,
+    Map<String, File> backgrounds,
   });
 
   $WordSelectionCopyWith<$Res>? get selection;
@@ -287,6 +292,7 @@ class _$PreviewStateCopyWithImpl<$Res, $Val extends PreviewState>
     Object? selection = freezed,
     Object? attaching = null,
     Object? failure = freezed,
+    Object? backgrounds = null,
   }) {
     return _then(
       _value.copyWith(
@@ -334,6 +340,10 @@ class _$PreviewStateCopyWithImpl<$Res, $Val extends PreviewState>
                 ? _value.failure
                 : failure // ignore: cast_nullable_to_non_nullable
                       as BuildFailure?,
+            backgrounds: null == backgrounds
+                ? _value.backgrounds
+                : backgrounds // ignore: cast_nullable_to_non_nullable
+                      as Map<String, File>,
           )
           as $Val,
     );
@@ -389,6 +399,7 @@ abstract class _$$PreviewStateImplCopyWith<$Res>
     WordSelection? selection,
     bool attaching,
     BuildFailure? failure,
+    Map<String, File> backgrounds,
   });
 
   @override
@@ -422,6 +433,7 @@ class __$$PreviewStateImplCopyWithImpl<$Res>
     Object? selection = freezed,
     Object? attaching = null,
     Object? failure = freezed,
+    Object? backgrounds = null,
   }) {
     return _then(
       _$PreviewStateImpl(
@@ -469,6 +481,10 @@ class __$$PreviewStateImplCopyWithImpl<$Res>
             ? _value.failure
             : failure // ignore: cast_nullable_to_non_nullable
                   as BuildFailure?,
+        backgrounds: null == backgrounds
+            ? _value._backgrounds
+            : backgrounds // ignore: cast_nullable_to_non_nullable
+                  as Map<String, File>,
       ),
     );
   }
@@ -489,7 +505,9 @@ class _$PreviewStateImpl extends _PreviewState {
     this.selection,
     this.attaching = false,
     this.failure,
+    final Map<String, File> backgrounds = const <String, File>{},
   }) : _pages = pages,
+       _backgrounds = backgrounds,
        super._();
 
   final List<CapturedPage> _pages;
@@ -527,9 +545,23 @@ class _$PreviewStateImpl extends _PreviewState {
   @override
   final BuildFailure? failure;
 
+  /// Each recognized page's background (the scan without its recognized words),
+  /// by page id, once built.
+  final Map<String, File> _backgrounds;
+
+  /// Each recognized page's background (the scan without its recognized words),
+  /// by page id, once built.
+  @override
+  @JsonKey()
+  Map<String, File> get backgrounds {
+    if (_backgrounds is EqualUnmodifiableMapView) return _backgrounds;
+    // ignore: implicit_dynamic_type
+    return EqualUnmodifiableMapView(_backgrounds);
+  }
+
   @override
   String toString() {
-    return 'PreviewState(pages: $pages, edits: $edits, view: $view, currentPage: $currentPage, colorMode: $colorMode, fileStem: $fileStem, sizeBytes: $sizeBytes, editing: $editing, selection: $selection, attaching: $attaching, failure: $failure)';
+    return 'PreviewState(pages: $pages, edits: $edits, view: $view, currentPage: $currentPage, colorMode: $colorMode, fileStem: $fileStem, sizeBytes: $sizeBytes, editing: $editing, selection: $selection, attaching: $attaching, failure: $failure, backgrounds: $backgrounds)';
   }
 
   @override
@@ -553,7 +585,11 @@ class _$PreviewStateImpl extends _PreviewState {
                 other.selection == selection) &&
             (identical(other.attaching, attaching) ||
                 other.attaching == attaching) &&
-            (identical(other.failure, failure) || other.failure == failure));
+            (identical(other.failure, failure) || other.failure == failure) &&
+            const DeepCollectionEquality().equals(
+              other._backgrounds,
+              _backgrounds,
+            ));
   }
 
   @override
@@ -570,6 +606,7 @@ class _$PreviewStateImpl extends _PreviewState {
     selection,
     attaching,
     failure,
+    const DeepCollectionEquality().hash(_backgrounds),
   );
 
   /// Create a copy of PreviewState
@@ -594,6 +631,7 @@ abstract class _PreviewState extends PreviewState {
     final WordSelection? selection,
     final bool attaching,
     final BuildFailure? failure,
+    final Map<String, File> backgrounds,
   }) = _$PreviewStateImpl;
   const _PreviewState._() : super._();
 
@@ -623,6 +661,11 @@ abstract class _PreviewState extends PreviewState {
   bool get attaching;
   @override
   BuildFailure? get failure;
+
+  /// Each recognized page's background (the scan without its recognized words),
+  /// by page id, once built.
+  @override
+  Map<String, File> get backgrounds;
 
   /// Create a copy of PreviewState
   /// with the given fields replaced by the non-null parameter values.

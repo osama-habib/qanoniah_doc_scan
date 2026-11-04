@@ -13,6 +13,12 @@ class _Fallback implements TextPdfRenderer {
     calls++;
     return Uint8List.fromList('%PDF-fallback'.codeUnits);
   }
+
+  @override
+  Future<Uint8List> renderPlaced(List<PdfPlacedPage> pages, PdfLook look) async {
+    calls++;
+    return Uint8List.fromList('%PDF-fallback'.codeUnits);
+  }
 }
 
 void main() {

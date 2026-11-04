@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:qanoniah_doc_scan/src/core/doc_scan_event.dart';
 import 'package:qanoniah_doc_scan/src/core/session/scan_session.dart';
@@ -61,7 +62,10 @@ void main() {
     c.undoMove();
     await pumpEventQueue();
     expect(order(), <String>['a', 'b', 'c']);
-    expect(events.map((DocScanEvent e) => e.name), containsAll(<String>['scan_review_opened', 'scan_page_moved', 'scan_page_move_undone']));
+    expect(
+      events.map((DocScanEvent e) => e.name),
+      containsAll(<String>['scan_review_opened', 'scan_page_moved', 'scan_page_move_undone']),
+    );
     await c.close();
   });
 
@@ -110,6 +114,38 @@ void main() {
     expect(sessions.session.pages.every((CapturedPage p) => p.filters.length == 2), isTrue);
     await c.resetFilters(pageId: 'a');
     expect(sessions.session.pages.first.filters, <PageFilter>{PageFilter.original});
+    await c.close();
+  });
+
+  test('[UT] one filter at a time: choosing another replaces it, «الأصل» clears it', () async {
+    final ReviewCubit c = cubit();
+    await c.setFilter(PageFilter.grayscale);
+    expect(
+      sessions.session.pages.every((CapturedPage p) => setEquals(p.filters, <PageFilter>{PageFilter.grayscale})),
+      isTrue,
+    );
+    await c.setFilter(PageFilter.blackWhite, pageId: 'b');
+    expect(sessions.session.pages[1].filters, <PageFilter>{PageFilter.blackWhite});
+    expect(sessions.session.pages[0].filters, <PageFilter>{PageFilter.grayscale});
+    await c.setFilter(PageFilter.original);
+    expect(
+      sessions.session.pages.every((CapturedPage p) => setEquals(p.filters, <PageFilter>{PageFilter.original})),
+      isTrue,
+    );
+    await c.close();
+  });
+
+  test('[UT] «تدوير» turns one page a quarter counter-clockwise and re-prepares it', () async {
+    final ReviewCubit c = cubit();
+    await c.rotate('b');
+    expect(sessions.session.pages[1].turns, 3);
+    expect(preparer.turns.last, 3);
+    await c.rotate('b');
+    expect(sessions.session.pages[1].turns, 2);
+    expect(sessions.session.pages[0].turns, 0);
+    // Corners kept their turns.
+    await c.adjustCorners('b', Quad.fullFrame);
+    expect(preparer.turns.last, 2);
     await c.close();
   });
 }

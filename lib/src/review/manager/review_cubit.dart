@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:async';
 
 import 'package:dartz/dartz.dart';
@@ -49,9 +50,7 @@ class ReviewCubit extends Cubit<ReviewState> {
        _recognition = recognition,
        _onEvent = onEvent,
        super(ReviewState(pages: sessions.session.pages, lastMove: sessions.session.lastMove)) {
-    _sub = _sessions.changes.listen(
-      (ScanSession s) => emit(state.copyWith(pages: s.pages, lastMove: s.lastMove)),
-    );
+    _sub = _sessions.changes.listen((ScanSession s) => emit(state.copyWith(pages: s.pages, lastMove: s.lastMove)));
     if (announce) _onEvent(DocScanEvent.reviewOpened(pageCount: state.pages.length));
   }
 
@@ -95,13 +94,51 @@ class ReviewCubit extends Cubit<ReviewState> {
   }
 
   /// Re-crops from the raw capture and re-queues recognition (story 12).
-  Future<void> adjustCorners(String pageId, Quad corners) async {
+  Future<void> adjustCorners(String pageId, Quad corners, {int? turns}) async {
     final CapturedPage? page = _page(pageId);
     if (page == null) return;
-    if (await _reprepare(page.copyWith(corners: corners))) {
+    if (await _reprepare(page.copyWith(corners: corners, turns: (turns ?? page.turns) % 4))) {
       _onEvent(DocScanEvent.cornersAdjusted());
     }
   }
+
+  /// «تدوير» on «توضيح الصفحات»: a quarter turn counter-clockwise of one page.
+  Future<void> rotate(String pageId) async {
+    final CapturedPage? page = _page(pageId);
+    if (page == null) return;
+    await _reprepare(page.copyWith(turns: (page.turns + 3) % 4));
+  }
+
+  /// Small real previews of [filters] on [page] as it is cropped and turned, for
+  /// the filter strip. Cached until the page's photo, corners or turns change.
+  Future<Map<PageFilter, File>> filterPreviews(CapturedPage page, List<PageFilter> filters) async {
+    final String key = '${page.rawFile.path}|${page.corners}|${page.turns}';
+    final Map<PageFilter, File> cached = _previews[key] ??= <PageFilter, File>{};
+    for (final PageFilter f in filters) {
+      if (cached.containsKey(f)) continue;
+      final File out = _sessions.newFile('jpg');
+      final Either<StorageFailure, Unit> r = await _preparer.prepare(
+        raw: page.rawFile,
+        corners: page.corners,
+        filters: <PageFilter>{f},
+        prepared: out,
+        ocrInput: _sessions.newFile('png'),
+        turns: page.turns,
+        longEdge: previewEdge,
+      );
+      if (isClosed) break;
+      if (r.isRight()) cached[f] = out;
+    }
+    return Map<PageFilter, File>.of(cached);
+  }
+
+  /// Long edge of a filter preview, in pixels.
+  static const int previewEdge = 360;
+  final Map<String, Map<PageFilter, File>> _previews = <String, Map<PageFilter, File>>{};
+
+  /// One filter, or none with [PageFilter.original], on one page or on all pages
+  /// when [pageId] is null (revised 2026-11-04: filters no longer combine).
+  Future<void> setFilter(PageFilter filter, {String? pageId}) => setFilters(<PageFilter>{filter}, pageId: pageId);
 
   /// Applies [filters] to one page, or to all pages when [pageId] is null (story 13).
   Future<void> setFilters(Set<PageFilter> filters, {String? pageId}) async {
@@ -118,8 +155,7 @@ class ReviewCubit extends Cubit<ReviewState> {
     if (any) _onEvent(DocScanEvent.filterApplied(filters: clean, allPages: pageId == null));
   }
 
-  Future<void> resetFilters({String? pageId}) =>
-      setFilters(const <PageFilter>{PageFilter.original}, pageId: pageId);
+  Future<void> resetFilters({String? pageId}) => setFilters(const <PageFilter>{PageFilter.original}, pageId: pageId);
 
   Future<bool> _reprepare(CapturedPage next) async {
     emit(state.copyWith(working: true));
@@ -134,6 +170,7 @@ class ReviewCubit extends Cubit<ReviewState> {
       filters: page.filters,
       prepared: page.preparedFile,
       ocrInput: page.ocrInputFile,
+      turns: page.turns,
     );
     if (isClosed) return false;
     if (prepared.isLeft()) {
@@ -148,8 +185,10 @@ class ReviewCubit extends Cubit<ReviewState> {
     return true;
   }
 
+  /// From the session, not [state]: the state catches up with the session's
+  /// changes asynchronously, so a second quick edit would start from a stale page.
   CapturedPage? _page(String id) {
-    for (final CapturedPage p in state.pages) {
+    for (final CapturedPage p in _sessions.session.pages) {
       if (p.id == id) return p;
     }
     return null;
