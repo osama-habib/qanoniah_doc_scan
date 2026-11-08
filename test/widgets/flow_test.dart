@@ -154,7 +154,7 @@ void main() {
     expect(find.text('صفحة 1 / 1'), findsOneWidget);
     await t.tap(find.text('التالي'));
     await settle(t, find.bySemanticsLabel('إنشاء مستند قابل للتعديل'));
-    expect(find.bySemanticsLabel('إرفاق كملف PDF'), findsOneWidget);
+    expect(find.bySemanticsLabel('معاينة'), findsOneWidget);
     await t.tap(find.bySemanticsLabel('إنشاء مستند قابل للتعديل'));
     await settle(t, find.bySemanticsLabel('معاينة ملف PDF'), tries: 200);
     expect(find.text('حكم'), findsWidgets);
@@ -274,9 +274,9 @@ void main() {
     await t.tap(find.text('حفظ (1)'));
     await settle(t, find.text('التالي'));
     await t.tap(find.text('التالي'));
-    await settle(t, find.bySemanticsLabel('إرفاق كملف PDF'));
+    await settle(t, find.bySemanticsLabel('معاينة'));
     expect(find.bySemanticsLabel('إنشاء مستند قابل للتعديل'), findsNothing);
-    await t.tap(find.bySemanticsLabel('إرفاق كملف PDF'));
+    await t.tap(find.bySemanticsLabel('معاينة'));
     await settle(t, find.bySemanticsLabel('معاينة ملف PDF'), tries: 200);
     expect(find.text('حكم'), findsNothing);
     await t.pump(const Duration(milliseconds: 300));
@@ -291,7 +291,7 @@ void main() {
     expect(r!.pageTexts.single, isEmpty);
   });
 
-  testWidgets('«إرفاق كملف PDF» on review goes straight to the photo preview', (WidgetTester t) async {
+  testWidgets('[IT] review offers «معاينة», not «إرفاق»: attaching comes only after the preview (pk6)', (WidgetTester t) async {
     await t.pumpWidget(host((Future<DocScanResult?> _) {}));
     await t.tap(find.text('scan'));
     await settle(t, find.bySemanticsLabel('التقاط'));
@@ -299,9 +299,11 @@ void main() {
     await t.tap(find.text('حفظ (1)'));
     await settle(t, find.text('التالي'));
     await t.tap(find.text('التالي'));
-    await settle(t, find.bySemanticsLabel('إرفاق كملف PDF'));
-    await t.tap(find.bySemanticsLabel('إرفاق كملف PDF'));
+    await settle(t, find.bySemanticsLabel('معاينة'));
+    expect(find.text('إرفاق كملف PDF'), findsNothing, reason: 'review never attaches');
+    await t.tap(find.bySemanticsLabel('معاينة'));
     await settle(t, find.bySemanticsLabel('معاينة ملف PDF'), tries: 200);
+    expect(find.text('إرفاق كملف PDF'), findsWidgets, reason: 'the preview attaches');
     // Photo pages: no text tip, no word selection.
     expect(find.text('يمكنك تحديد أي نص لحجبه أو تعديله قبل الإرسال.'), findsNothing);
   });

@@ -117,9 +117,9 @@ class ReviewScreen extends StatelessWidget {
                       if (onBuild != null) ...<Widget>[
                         ScanPrimaryButton(label: s.buildDocument, onPressed: enabled ? onBuild : null),
                         const SizedBox(height: 10),
-                        ScanSecondaryButton(label: s.attach, onPressed: enabled ? onAttachImages : null),
+                        ScanSecondaryButton(label: s.preview, onPressed: enabled ? onAttachImages : null),
                       ] else
-                        ScanPrimaryButton(label: s.attach, onPressed: enabled ? onAttachImages : null),
+                        ScanPrimaryButton(label: s.preview, onPressed: enabled ? onAttachImages : null),
                     ],
                   ),
                 ),

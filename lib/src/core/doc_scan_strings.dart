@@ -106,6 +106,7 @@ class DocScanStrings {
     required this.rename,
     required this.renameSave,
     required this.attach,
+    required this.preview,
     required this.attachNote,
     required this.sizeLimit,
     required this.defaultFileStem,
@@ -239,6 +240,10 @@ class DocScanStrings {
 
   // Attach
   final String attach;
+
+  /// Review's button to the PDF preview (ClickUp z8y71x6pk6): «إرفاق» comes
+  /// only on the preview, after the user has seen the file.
+  final String preview;
   final String attachNote;
   final String Function(double sizeMb, double limitMb) sizeLimit;
 
@@ -352,6 +357,7 @@ class DocScanStrings {
       rename: 'إعادة تسمية المستند',
       renameSave: 'حفظ', // TODO(ahmed): pending UX approval
       attach: 'إرفاق كملف PDF',
+      preview: 'معاينة',
       attachNote: 'تُدمج الصفحات في ملف PDF واحد ويُقرأ نصها قبل الإجابة.',
       // TODO(ahmed): pending UX approval
       sizeLimit: (double size, double limit) =>
@@ -458,6 +464,7 @@ class DocScanStrings {
       rename: 'Rename document',
       renameSave: 'Save',
       attach: 'Attach as PDF',
+      preview: 'Preview',
       attachNote: 'Pages are merged into one PDF and its text is read before answering.',
       sizeLimit: (double size, double limit) =>
           'The file is ${size.toStringAsFixed(1)} MB and the limit is '
@@ -562,6 +569,7 @@ class DocScanStrings {
     String? rename,
     String? renameSave,
     String? attach,
+    String? preview,
     String? attachNote,
     String Function(double sizeMb, double limitMb)? sizeLimit,
     String? defaultFileStem,
@@ -662,6 +670,7 @@ class DocScanStrings {
       rename: rename ?? this.rename,
       renameSave: renameSave ?? this.renameSave,
       attach: attach ?? this.attach,
+      preview: preview ?? this.preview,
       attachNote: attachNote ?? this.attachNote,
       sizeLimit: sizeLimit ?? this.sizeLimit,
       defaultFileStem: defaultFileStem ?? this.defaultFileStem,

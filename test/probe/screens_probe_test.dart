@@ -196,9 +196,9 @@ void main() {
     await until(find.text('توضيح الصفحات'));
     if (only.contains('filters')) await shot('3_filters');
     await t.tap(find.text('التالي'));
-    await until(find.bySemanticsLabel('إرفاق كملف PDF'));
+    await until(find.bySemanticsLabel('معاينة'));
     if (only.contains('review')) await shot('4_review');
-    await t.tap(find.bySemanticsLabel('إرفاق كملف PDF'));
+    await t.tap(find.bySemanticsLabel('معاينة'));
     await until(find.bySemanticsLabel('معاينة ملف PDF'), tries: 400);
     if (only.contains('preview')) await shot('5_preview');
     // Pull the sheet down from the header: «تجاهل المسح؟».
