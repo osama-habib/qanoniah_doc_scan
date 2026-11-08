@@ -42,6 +42,12 @@ class FakeCameraSource implements CameraSource {
     return Right<CameraFailure, File>(f);
   }
 
+  /// The last flash the capture asked for.
+  ScanFlash flash = ScanFlash.off;
+
+  @override
+  Future<void> setFlash(ScanFlash flash) async => this.flash = flash;
+
   @override
   Future<void> pause() async => paused = true;
 

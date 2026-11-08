@@ -49,6 +49,16 @@ class DocScanStrings {
     required this.savePage,
     required this.retake,
     required this.rotate,
+    required this.flash,
+    required this.flashAuto,
+    required this.flashOn,
+    required this.flashOff,
+    required this.cameraPaused,
+    required this.resumeCamera,
+    required this.discardTitle,
+    required this.discardBody,
+    required this.discardConfirm,
+    required this.discardKeep,
     required this.filtersTitle,
     required this.filtersPanelTitle,
     required this.next,
@@ -144,6 +154,24 @@ class DocScanStrings {
 
   /// «تدوير»: a quarter turn of the page on the corner step.
   final String rotate;
+
+  /// «الفلاش» on the camera header.
+  final String flash;
+
+  /// The flash state shown beside its icon.
+  final String flashAuto;
+  final String flashOn;
+  final String flashOff;
+
+  /// The camera paused itself after a while without a capture.
+  final String cameraPaused;
+  final String resumeCamera;
+
+  /// Closing a scan that has pages.
+  final String discardTitle;
+  final String discardBody;
+  final String discardConfirm;
+  final String discardKeep;
   final String filtersTitle;
 
   /// «الفلاتر», the filter strip's heading on «توضيح الصفحات».
@@ -264,6 +292,16 @@ class DocScanStrings {
       savePage: 'حفظ الصفحة',
       retake: 'إعادة الالتقاط',
       rotate: 'تدوير',
+      flash: 'الفلاش',
+      flashAuto: 'تلقائي',
+      flashOn: 'تشغيل',
+      flashOff: 'إيقاف',
+      cameraPaused: 'توقفت الكاميرا لتوفير البطارية',
+      resumeCamera: 'استئناف الكاميرا',
+      discardTitle: 'تجاهل المسح؟',
+      discardBody: 'ستُحذف الصفحات الملتقطة ولن يُرفق شيء.',
+      discardConfirm: 'تجاهل المسح',
+      discardKeep: 'متابعة المسح',
       filtersTitle: 'توضيح الصفحات',
       filtersPanelTitle: 'الفلاتر',
       next: 'التالي',
@@ -363,6 +401,16 @@ class DocScanStrings {
       savePage: 'Save page',
       retake: 'Retake',
       rotate: 'Rotate',
+      flash: 'Flash',
+      flashAuto: 'Auto',
+      flashOn: 'On',
+      flashOff: 'Off',
+      cameraPaused: 'The camera paused to save battery',
+      resumeCamera: 'Resume camera',
+      discardTitle: 'Discard this scan?',
+      discardBody: 'The captured pages will be deleted and nothing will be attached.',
+      discardConfirm: 'Discard scan',
+      discardKeep: 'Keep scanning',
       filtersTitle: 'Enhance pages',
       filtersPanelTitle: 'Filters',
       next: 'Next',
@@ -457,6 +505,16 @@ class DocScanStrings {
     String? savePage,
     String? retake,
     String? rotate,
+    String? flash,
+    String? flashAuto,
+    String? flashOn,
+    String? flashOff,
+    String? cameraPaused,
+    String? resumeCamera,
+    String? discardTitle,
+    String? discardBody,
+    String? discardConfirm,
+    String? discardKeep,
     String? filtersTitle,
     String? filtersPanelTitle,
     String? next,
@@ -547,6 +605,16 @@ class DocScanStrings {
       savePage: savePage ?? this.savePage,
       retake: retake ?? this.retake,
       rotate: rotate ?? this.rotate,
+      flash: flash ?? this.flash,
+      flashAuto: flashAuto ?? this.flashAuto,
+      flashOn: flashOn ?? this.flashOn,
+      flashOff: flashOff ?? this.flashOff,
+      cameraPaused: cameraPaused ?? this.cameraPaused,
+      resumeCamera: resumeCamera ?? this.resumeCamera,
+      discardTitle: discardTitle ?? this.discardTitle,
+      discardBody: discardBody ?? this.discardBody,
+      discardConfirm: discardConfirm ?? this.discardConfirm,
+      discardKeep: discardKeep ?? this.discardKeep,
       filtersTitle: filtersTitle ?? this.filtersTitle,
       filtersPanelTitle: filtersPanelTitle ?? this.filtersPanelTitle,
       next: next ?? this.next,

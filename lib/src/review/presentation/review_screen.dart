@@ -40,6 +40,8 @@ class ReviewScreen extends StatelessWidget {
 
   /// Discards the scan. The camera's cancel keeps pages (owner, 2026-11-03), so
   /// review keeps a way out.
+  // TODO(unused): review shows no «إلغاء» since pk2 (the pull-down closes the
+  // scan); kept for a host that wants the button back.
   final VoidCallback onCancel;
   final VoidCallback onAddPage;
 
@@ -84,7 +86,8 @@ class ReviewScreen extends StatelessWidget {
                     background: t.surfaceTertiary,
                     onPressed: onBack,
                   ),
-                  trailing: ScanQuietButton(label: s.cancel, onPressed: onCancel),
+                  // Design `scanReview`: no «إلغاء» here; the sheet's pull-down
+                  // closes the scan (pk2).
                 ),
                 if (st.working)
                   LinearProgressIndicator(minHeight: 2, color: t.primary, backgroundColor: t.surfaceSecondary),

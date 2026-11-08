@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../core/scan_metrics.dart';
 import '../../core/doc_scan_icons.dart';
 import '../../core/doc_scan_strings.dart';
 import '../../core/doc_scan_theme.dart';
@@ -85,6 +86,17 @@ class _FiltersScreenState extends State<FiltersScreen> {
     unawaited(cubit.setFilters(next, pageId: _allPages ? null : page.id));
   }
 
+  /// A horizontal swipe on the page: toward the reading end shows the next page
+  /// (right in Arabic), back toward the start the previous one.
+  void _swipe(DragEndDetails d, int i, int count) {
+    final double v = d.primaryVelocity ?? 0;
+    if (v.abs() < 200) return;
+    final bool rtl = Directionality.of(context) == TextDirection.rtl;
+    final bool next = rtl ? v > 0 : v < 0;
+    final int to = next ? i + 1 : i - 1;
+    if (to >= 0 && to < count) setState(() => _index = to);
+  }
+
   /// One filter at a time: the tapped one replaces the current one; tapping the
   /// current one goes back to the original.
   void _choose(ReviewCubit cubit, CapturedPage page, PageFilter f) {
@@ -119,8 +131,10 @@ class _FiltersScreenState extends State<FiltersScreen> {
             bottom: false,
             child: Column(
               children: <Widget>[
+                // Design `scan-filter` header: back, the title and page count,
+                // «التالي»; 12 between them.
                 Padding(
-                  padding: EdgeInsets.fromLTRB(t.spaceLg, t.spaceMd, t.spaceLg, t.spaceSm),
+                  padding: ScanMetrics.filtersHeader,
                   child: Row(
                     children: <Widget>[
                       ScanIconButton(
@@ -131,83 +145,81 @@ class _FiltersScreenState extends State<FiltersScreen> {
                         background: t.onCameraSurface.withValues(alpha: 0.12),
                         onPressed: widget.onBack,
                       ),
+                      SizedBox(width: t.spaceMd),
                       Expanded(
                         child: Column(
                           children: <Widget>[
                             Semantics(
                               header: true,
-                              child: Text(s.filtersTitle, style: t.bodyStrongStyle.copyWith(color: t.onCameraSurface)),
+                              child: Text(
+                                s.filtersTitle,
+                                style: t.bodyStyle
+                                    .sized(16, 24)
+                                    .copyWith(color: t.onCameraSurface, fontWeight: FontWeight.w700),
+                              ),
                             ),
                             Text(
                               s.pageOf(i + 1, st.pages.length),
-                              style: t.captionStyle.copyWith(color: t.onCameraSurfaceMuted),
+                              style: t.captionStyle.sized(12, 16).copyWith(color: t.onCameraSurfaceMuted),
                             ),
                           ],
                         ),
                       ),
-                      ScanIconButton(
-                        icon: t.icons.rotate,
-                        label: s.rotate,
-                        color: t.onCameraSurface,
-                        background: t.onCameraSurface.withValues(alpha: 0.12),
-                        onPressed: st.working ? null : () => unawaited(cubit.rotate(page.id)),
-                      ),
-                      SizedBox(width: t.spaceSm),
+                      SizedBox(width: t.spaceMd),
                       _Pill(label: s.next, onTap: st.working ? null : widget.onNext),
                     ],
                   ),
                 ),
                 Expanded(
                   child: Padding(
-                    padding: EdgeInsets.symmetric(horizontal: t.spaceXl, vertical: t.spaceSm),
-                    child: Stack(
-                      alignment: Alignment.center,
+                    padding: EdgeInsets.symmetric(horizontal: t.spaceXs, vertical: t.spaceSm),
+                    // The arrows sit beside the page, not over its edges: the page's
+                    // slot keeps its size while a re-prepared page loads, so the
+                    // arrows stay where they can be tapped (pk0).
+                    child: Row(
                       children: <Widget>[
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(t.radiusSm / 2),
-                          child: Image.file(
-                            page.preparedFile,
-                            key: ValueKey<String>(page.preparedFile.path),
-                            fit: BoxFit.contain,
+                        _PageArrow(
+                          show: many,
+                          enabled: i > 0,
+                          label: s.pageLabel(i),
+                          onTap: () => setState(() => _index = i - 1),
+                        ),
+                        Expanded(
+                          child: GestureDetector(
+                            key: const ValueKey<String>('filters-page'),
+                            behavior: HitTestBehavior.opaque,
+                            onHorizontalDragEnd: many ? (DragEndDetails d) => _swipe(d, i, st.pages.length) : null,
+                            child: Stack(
+                              fit: StackFit.expand,
+                              alignment: Alignment.center,
+                              children: <Widget>[
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(t.radiusSm / 2),
+                                  child: Image.file(
+                                    page.preparedFile,
+                                    key: ValueKey<String>(page.preparedFile.path),
+                                    fit: BoxFit.contain,
+                                    gaplessPlayback: true,
+                                  ),
+                                ),
+                                if (st.working)
+                                  Center(
+                                    child: CircularProgressIndicator(
+                                      color: t.onCameraSurface,
+                                      strokeWidth: t.frameStrokeWidth,
+                                    ),
+                                  ),
+                              ],
+                            ),
                           ),
                         ),
-                        if (st.working)
-                          CircularProgressIndicator(color: t.onCameraSurface, strokeWidth: t.frameStrokeWidth),
-                        if (many) ...<Widget>[
-                          PositionedDirectional(
-                            start: -t.spaceXl + t.spaceXs,
-                            child: Opacity(
-                              opacity: i > 0 ? 1 : 0.35,
-                              child: ScanIconButton(
-                                icon: t.icons.back,
-                                label: s.pageLabel(i),
-                                mirrorInRtl: true,
-                                size: t.iconSize * 0.75,
-                                color: t.onCameraSurface,
-                                background: t.onCameraSurface.withValues(alpha: 0.14),
-                                onPressed: i > 0 ? () => setState(() => _index = i - 1) : null,
-                              ),
-                            ),
-                          ),
-                          PositionedDirectional(
-                            end: -t.spaceXl + t.spaceXs,
-                            child: Opacity(
-                              opacity: i < st.pages.length - 1 ? 1 : 0.35,
-                              child: Transform.flip(
-                                flipX: true,
-                                child: ScanIconButton(
-                                  icon: t.icons.back,
-                                  label: s.pageLabel(i + 2),
-                                  mirrorInRtl: true,
-                                  size: t.iconSize * 0.75,
-                                  color: t.onCameraSurface,
-                                  background: t.onCameraSurface.withValues(alpha: 0.14),
-                                  onPressed: i < st.pages.length - 1 ? () => setState(() => _index = i + 1) : null,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
+                        _PageArrow(
+                          show: many,
+                          enabled: i < st.pages.length - 1,
+                          next: true,
+                          label: s.pageLabel(i + 2),
+                          onTap: () => setState(() => _index = i + 1),
+                        ),
                       ],
                     ),
                   ),
@@ -238,6 +250,15 @@ class _FiltersScreenState extends State<FiltersScreen> {
                                     color: t.onCameraSurfaceMuted,
                                     onPressed: () => _apply(cubit, page, const <PageFilter>{PageFilter.original}),
                                   ),
+                                // «تدوير» for this page (not in the design: kept out of
+                                // the header, which follows it).
+                                ScanIconButton(
+                                  icon: t.icons.rotate,
+                                  label: s.rotate,
+                                  color: t.onCameraSurface,
+                                  background: t.onCameraSurface.withValues(alpha: 0.12),
+                                  onPressed: st.working ? null : () => unawaited(cubit.rotate(page.id)),
+                                ),
                               ],
                             ),
                           ),
@@ -302,6 +323,49 @@ class _FiltersScreenState extends State<FiltersScreen> {
   }
 }
 
+/// A previous or next page arrow beside the page; an empty slot of the same
+/// width for a single page, so the page keeps its place.
+class _PageArrow extends StatelessWidget {
+  const _PageArrow({
+    required this.show,
+    required this.enabled,
+    required this.label,
+    required this.onTap,
+    this.next = false,
+  });
+
+  final bool show;
+  final bool enabled;
+  final String label;
+  final VoidCallback onTap;
+  final bool next;
+
+  @override
+  Widget build(BuildContext context) {
+    final DocScanTheme t = DocScanTheme.of(context);
+    final Widget button = ScanIconButton(
+      icon: t.icons.back,
+      label: label,
+      mirrorInRtl: true,
+      size: t.iconSize * 0.75,
+      color: t.onCameraSurface,
+      background: t.onCameraSurface.withValues(alpha: 0.14),
+      onPressed: enabled ? onTap : null,
+    );
+    return SizedBox(
+      width: t.iconSize * 1.5 + t.spaceSm,
+      child: !show
+          ? null
+          : Center(
+              child: Opacity(
+                opacity: enabled ? 1 : 0.35,
+                child: next ? Transform.flip(flipX: true, child: button) : button,
+              ),
+            ),
+    );
+  }
+}
+
 class _Pill extends StatelessWidget {
   const _Pill({required this.label, required this.onTap});
 
@@ -311,19 +375,25 @@ class _Pill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final DocScanTheme t = DocScanTheme.of(context);
+    // Design: 36 high, 16 at the sides, a 14 / 20 bold label, fully rounded.
     return Semantics(
       button: true,
       label: label,
       excludeSemantics: true,
       child: Material(
         color: t.onCameraSurface,
-        borderRadius: BorderRadius.circular(t.radiusLg),
+        shape: const StadiumBorder(),
         child: InkWell(
-          borderRadius: BorderRadius.circular(t.radiusLg),
+          customBorder: const StadiumBorder(),
           onTap: onTap,
-          child: Padding(
-            padding: EdgeInsets.symmetric(horizontal: t.spaceLg, vertical: t.spaceSm),
-            child: Text(label, style: t.buttonStyle.copyWith(color: t.primary)),
+          child: Container(
+            height: 36,
+            padding: EdgeInsets.symmetric(horizontal: t.spaceLg),
+            alignment: Alignment.center,
+            child: Text(
+              label,
+              style: t.buttonStyle.sized(14, 20).copyWith(color: t.primary, fontWeight: FontWeight.w700),
+            ),
           ),
         ),
       ),

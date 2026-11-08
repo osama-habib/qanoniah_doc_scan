@@ -25,6 +25,8 @@ import '../recognition/data/text_recognizer.dart';
 import '../review/manager/review_cubit.dart';
 import '../review/presentation/filters_screen.dart';
 import '../review/presentation/review_screen.dart';
+import 'presentation/scan_confirm.dart';
+import 'presentation/scan_sheet.dart';
 import 'doc_scan_config.dart';
 import 'doc_scan_event.dart';
 import 'doc_scan_result.dart';
@@ -152,6 +154,9 @@ class _DocScanFlowState extends State<DocScanFlow> {
 
   /// The camera of the current visit; its capture cubit disposes it.
   CameraSource? _camera;
+
+  /// The flash the user chose, kept between camera visits.
+  ScanFlash _flash = ScanFlash.off;
   BuildOutput? _built;
   PreviewCubit? _preview;
   bool _closing = false;
@@ -232,12 +237,29 @@ class _DocScanFlowState extends State<DocScanFlow> {
     _step = _Step.build;
   });
 
-  /// Cancel or drag-down on the camera never discards captured pages (owner,
-  /// 2026-11-03): with pages it goes to review, with none it closes the flow.
-  /// Discarding the scan is review's or preview's «إلغاء».
+  // TODO(unused): «إلغاء» and the pull-down close the scan from every step now
+  // (pk2, `_requestClose`); kept for a back that returns to review instead.
+  // ignore: unused_element
   void _cameraCancelled() {
     if (_sessions.session.pages.isNotEmpty) return _openReview();
     _cancel(ScanStep.capture);
+  }
+
+  /// «إلغاء» or the pull-down, on any step (pk2): closes the scan without
+  /// attaching anything. Captured pages are never dropped by accident: with
+  /// pages, «تجاهل المسح؟» asks first (owner rule of 2026-11-03).
+  Future<void> _requestClose() async {
+    if (_closing) return;
+    if (_sessions.session.pages.isEmpty) return _cancel(_scanStep);
+    final DocScanStrings s = widget.strings;
+    final bool discard = await showScanConfirm(
+      context,
+      title: s.discardTitle,
+      body: s.discardBody,
+      confirm: s.discardConfirm,
+      cancel: s.discardKeep,
+    );
+    if (discard && mounted) await _cancel(_scanStep);
   }
 
   /// The preview's back (design `scanPdfBack`): review again; a later build
@@ -317,14 +339,19 @@ class _DocScanFlowState extends State<DocScanFlow> {
       canPop: false,
       onPopInvokedWithResult: (bool didPop, Object? _) {
         if (didPop) return;
-        if (_step == _Step.camera) return _cameraCancelled();
-        unawaited(_cancel(_scanStep));
+        unawaited(_requestClose());
       },
       child: Scaffold(
         backgroundColor: _step == _Step.camera ? t.cameraSurface : t.surface,
-        body: AnimatedSwitcher(
-          duration: const Duration(milliseconds: 220),
-          child: KeyedSubtree(key: ValueKey<Object>('$_step/$_visit'), child: _body(t, s)),
+        body: ScanSheet(
+          handleColor: _step == _Step.camera || _step == _Step.filters
+              ? t.onCameraSurface.withValues(alpha: 0.45)
+              : t.border,
+          onDismiss: _requestClose,
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 220),
+            child: KeyedSubtree(key: ValueKey<Object>('$_step/$_visit'), child: _body(t, s)),
+          ),
         ),
       ),
     );
@@ -357,11 +384,13 @@ class _DocScanFlowState extends State<DocScanFlow> {
             recognition: _recognition,
             onEvent: _emit,
             replacePageId: _replacing,
+            initialFlash: _flash,
+            onFlashChanged: (ScanFlash f) => _flash = f,
           )..start(),
           child: CameraSheet(
             strings: s,
             preview: camera.preview,
-            onCancel: _cameraCancelled,
+            onCancel: _requestClose,
             // The camera always hands over to «توضيح الصفحات» (design).
             onReview: () {
               final bool added = _fromReview && _sessions.session.pages.length > _pagesBeforeVisit;
@@ -396,7 +425,7 @@ class _DocScanFlowState extends State<DocScanFlow> {
           child: ReviewScreen(
             strings: s,
             onBack: _openFilters,
-            onCancel: () => _cancel(ScanStep.review),
+            onCancel: _requestClose,
             onAddPage: _openCamera,
             onRetakeLast: (String id) => _openCamera(replacing: id),
             onOpenFilters: _openFilters,
@@ -422,7 +451,7 @@ class _DocScanFlowState extends State<DocScanFlow> {
               _built = st.output;
               _step = _Step.preview;
             }),
-            child: BuildScreen(strings: s, onCancel: () => _cancel(ScanStep.build)),
+            child: BuildScreen(strings: s, onCancel: _requestClose),
           ),
         );
       case _Step.preview:

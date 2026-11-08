@@ -52,6 +52,13 @@ mixin _$CaptureState {
   int get straightenTurns => throw _privateConstructorUsedError;
   int get straightens => throw _privateConstructorUsedError;
 
+  /// The flash for the next stills (pk3).
+  ScanFlash get flash => throw _privateConstructorUsedError;
+
+  /// The camera paused itself after [CaptureCubit.idleAfter] without a capture,
+  /// so the phone does not heat up; «استئناف الكاميرا» wakes it (pk5).
+  bool get idle => throw _privateConstructorUsedError;
+
   /// Create a copy of CaptureState
   /// with the given fields replaced by the non-null parameter values.
   @JsonKey(includeFromJson: false, includeToJson: false)
@@ -85,6 +92,8 @@ abstract class $CaptureStateCopyWith<$Res> {
     Quad? straightenQuad,
     int straightenTurns,
     int straightens,
+    ScanFlash flash,
+    bool idle,
   });
 
   $QuadCopyWith<$Res>? get quad;
@@ -125,6 +134,8 @@ class _$CaptureStateCopyWithImpl<$Res, $Val extends CaptureState>
     Object? straightenQuad = freezed,
     Object? straightenTurns = null,
     Object? straightens = null,
+    Object? flash = null,
+    Object? idle = null,
   }) {
     return _then(
       _value.copyWith(
@@ -200,6 +211,14 @@ class _$CaptureStateCopyWithImpl<$Res, $Val extends CaptureState>
                 ? _value.straightens
                 : straightens // ignore: cast_nullable_to_non_nullable
                       as int,
+            flash: null == flash
+                ? _value.flash
+                : flash // ignore: cast_nullable_to_non_nullable
+                      as ScanFlash,
+            idle: null == idle
+                ? _value.idle
+                : idle // ignore: cast_nullable_to_non_nullable
+                      as bool,
           )
           as $Val,
     );
@@ -276,6 +295,8 @@ abstract class _$$CaptureStateImplCopyWith<$Res>
     Quad? straightenQuad,
     int straightenTurns,
     int straightens,
+    ScanFlash flash,
+    bool idle,
   });
 
   @override
@@ -318,6 +339,8 @@ class __$$CaptureStateImplCopyWithImpl<$Res>
     Object? straightenQuad = freezed,
     Object? straightenTurns = null,
     Object? straightens = null,
+    Object? flash = null,
+    Object? idle = null,
   }) {
     return _then(
       _$CaptureStateImpl(
@@ -393,6 +416,14 @@ class __$$CaptureStateImplCopyWithImpl<$Res>
             ? _value.straightens
             : straightens // ignore: cast_nullable_to_non_nullable
                   as int,
+        flash: null == flash
+            ? _value.flash
+            : flash // ignore: cast_nullable_to_non_nullable
+                  as ScanFlash,
+        idle: null == idle
+            ? _value.idle
+            : idle // ignore: cast_nullable_to_non_nullable
+                  as bool,
       ),
     );
   }
@@ -420,6 +451,8 @@ class _$CaptureStateImpl implements _CaptureState {
     this.straightenQuad,
     this.straightenTurns = 0,
     this.straightens = 0,
+    this.flash = ScanFlash.off,
+    this.idle = false,
   });
 
   @override
@@ -483,9 +516,20 @@ class _$CaptureStateImpl implements _CaptureState {
   @JsonKey()
   final int straightens;
 
+  /// The flash for the next stills (pk3).
+  @override
+  @JsonKey()
+  final ScanFlash flash;
+
+  /// The camera paused itself after [CaptureCubit.idleAfter] without a capture,
+  /// so the phone does not heat up; «استئناف الكاميرا» wakes it (pk5).
+  @override
+  @JsonKey()
+  final bool idle;
+
   @override
   String toString() {
-    return 'CaptureState(phase: $phase, mode: $mode, quad: $quad, hint: $hint, pageCount: $pageCount, capturing: $capturing, shots: $shots, lastThumbnail: $lastThumbnail, limitReached: $limitReached, storageFull: $storageFull, replaced: $replaced, adjustFile: $adjustFile, adjustQuad: $adjustQuad, adjustTurns: $adjustTurns, straightenFile: $straightenFile, straightenQuad: $straightenQuad, straightenTurns: $straightenTurns, straightens: $straightens)';
+    return 'CaptureState(phase: $phase, mode: $mode, quad: $quad, hint: $hint, pageCount: $pageCount, capturing: $capturing, shots: $shots, lastThumbnail: $lastThumbnail, limitReached: $limitReached, storageFull: $storageFull, replaced: $replaced, adjustFile: $adjustFile, adjustQuad: $adjustQuad, adjustTurns: $adjustTurns, straightenFile: $straightenFile, straightenQuad: $straightenQuad, straightenTurns: $straightenTurns, straightens: $straightens, flash: $flash, idle: $idle)';
   }
 
   @override
@@ -523,11 +567,13 @@ class _$CaptureStateImpl implements _CaptureState {
             (identical(other.straightenTurns, straightenTurns) ||
                 other.straightenTurns == straightenTurns) &&
             (identical(other.straightens, straightens) ||
-                other.straightens == straightens));
+                other.straightens == straightens) &&
+            (identical(other.flash, flash) || other.flash == flash) &&
+            (identical(other.idle, idle) || other.idle == idle));
   }
 
   @override
-  int get hashCode => Object.hash(
+  int get hashCode => Object.hashAll([
     runtimeType,
     phase,
     mode,
@@ -547,7 +593,9 @@ class _$CaptureStateImpl implements _CaptureState {
     straightenQuad,
     straightenTurns,
     straightens,
-  );
+    flash,
+    idle,
+  ]);
 
   /// Create a copy of CaptureState
   /// with the given fields replaced by the non-null parameter values.
@@ -578,6 +626,8 @@ abstract class _CaptureState implements CaptureState {
     final Quad? straightenQuad,
     final int straightenTurns,
     final int straightens,
+    final ScanFlash flash,
+    final bool idle,
   }) = _$CaptureStateImpl;
 
   @override
@@ -632,6 +682,15 @@ abstract class _CaptureState implements CaptureState {
   int get straightenTurns;
   @override
   int get straightens;
+
+  /// The flash for the next stills (pk3).
+  @override
+  ScanFlash get flash;
+
+  /// The camera paused itself after [CaptureCubit.idleAfter] without a capture,
+  /// so the phone does not heat up; «استئناف الكاميرا» wakes it (pk5).
+  @override
+  bool get idle;
 
   /// Create a copy of CaptureState
   /// with the given fields replaced by the non-null parameter values.

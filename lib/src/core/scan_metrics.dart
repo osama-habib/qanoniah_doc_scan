@@ -7,7 +7,12 @@ import 'package:flutter/painting.dart';
 /// PENDING DESIGN CONFIRMATION (Ahmed): replace with tokens once the kit has them.
 /// Colors and font families still come from the host's [DocScanTheme].
 abstract final class ScanMetrics {
-  static const EdgeInsets header = EdgeInsets.fromLTRB(16, 12, 16, 12);
+  /// Design header: 22 above (the sheet's grabber sits in it), 16 at the sides,
+  /// 12 below.
+  static const EdgeInsets header = EdgeInsets.fromLTRB(16, 22, 16, 12);
+
+  /// «توضيح الصفحات»'s header: 10 below.
+  static const EdgeInsets filtersHeader = EdgeInsets.fromLTRB(16, 22, 16, 10);
   static const EdgeInsets cameraBar = EdgeInsets.fromLTRB(24, 12, 24, 16);
   static const EdgeInsets reviewBar = EdgeInsets.fromLTRB(16, 12, 16, 16);
   static const EdgeInsets previewBar = EdgeInsets.fromLTRB(16, 10, 16, 16);

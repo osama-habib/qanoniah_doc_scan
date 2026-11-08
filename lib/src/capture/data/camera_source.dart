@@ -20,6 +20,9 @@ class CameraFrame {
   final int height;
 }
 
+/// The flash for stills (pk3): fires when the scene is dark, always, or never.
+enum ScanFlash { auto, on, off }
+
 /// The camera, behind a port so capture logic is testable without hardware
 /// (constitution P5).
 abstract interface class CameraSource {
@@ -33,6 +36,9 @@ abstract interface class CameraSource {
 
   /// A full-resolution still, written to a file the caller owns.
   Future<Either<CameraFailure, File>> takePicture();
+
+  /// The flash for the next stills; kept across [pause] and [resume].
+  Future<void> setFlash(ScanFlash flash);
 
   /// Releases the camera while the app is in the background.
   Future<void> pause();
@@ -58,6 +64,25 @@ class CameraPluginSource implements CameraSource {
   CameraDescription? _description;
   DateTime _lastFrame = DateTime.fromMillisecondsSinceEpoch(0);
   bool _streaming = false;
+  ScanFlash _flash = ScanFlash.off;
+
+  static FlashMode _mode(ScanFlash f) => switch (f) {
+    ScanFlash.auto => FlashMode.auto,
+    ScanFlash.on => FlashMode.always,
+    ScanFlash.off => FlashMode.off,
+  };
+
+  @override
+  Future<void> setFlash(ScanFlash flash) async {
+    _flash = flash;
+    final CameraController? c = _controller;
+    if (c == null || !c.value.isInitialized) return;
+    try {
+      await c.setFlashMode(_mode(flash));
+    } on CameraException {
+      // A camera without a flash keeps taking pictures without it.
+    }
+  }
 
   @override
   Future<Either<CameraFailure, Unit>> initialize() async {
@@ -88,7 +113,11 @@ class CameraPluginSource implements CameraSource {
       imageFormatGroup: ImageFormatGroup.yuv420,
     );
     await c.initialize();
-    await c.setFlashMode(FlashMode.off);
+    try {
+      await c.setFlashMode(_mode(_flash));
+    } on CameraException {
+      // No flash on this camera.
+    }
     await c.lockCaptureOrientation(DeviceOrientation.portraitUp);
     _controller = c;
     await _startStream();

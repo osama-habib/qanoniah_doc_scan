@@ -36,7 +36,12 @@ void main() {
   late DateTime clock;
   late FakePagePreparer preparer;
 
-  CaptureCubit cubit({String? replacing}) => CaptureCubit(
+  CaptureCubit cubit({
+    String? replacing,
+    Duration idleAfter = const Duration(seconds: 10),
+    ScanFlash initialFlash = ScanFlash.off,
+    void Function(ScanFlash)? onFlashChanged,
+  }) => CaptureCubit(
     camera: camera,
     edges: edges,
     permissions: permissions,
@@ -46,6 +51,9 @@ void main() {
     onEvent: events.add,
     replacePageId: replacing,
     now: () => clock,
+    idleAfter: idleAfter,
+    initialFlash: initialFlash,
+    onFlashChanged: onFlashChanged,
   );
 
   Future<void> feed(int n, {Duration step = const Duration(milliseconds: 200)}) async {
@@ -274,5 +282,63 @@ void main() {
     // The next page starts from the found turns again.
     expect(c.state.adjustTurns, 0);
     await c.close();
+  });
+
+  test('[UT] the flash goes off, auto, on, off; the camera and the flow get each choice (pk3)', () async {
+    final List<ScanFlash> told = <ScanFlash>[];
+    final CaptureCubit c = cubit(initialFlash: ScanFlash.auto, onFlashChanged: told.add);
+    await c.start();
+    // The visit opens with the flow's last choice.
+    expect(camera.flash, ScanFlash.auto);
+    await c.cycleFlash();
+    expect((c.state.flash, camera.flash), (ScanFlash.on, ScanFlash.on));
+    await c.cycleFlash();
+    expect((c.state.flash, camera.flash), (ScanFlash.off, ScanFlash.off));
+    await c.cycleFlash();
+    expect((c.state.flash, camera.flash), (ScanFlash.auto, ScanFlash.auto));
+    expect(told, <ScanFlash>[ScanFlash.on, ScanFlash.off, ScanFlash.auto]);
+    await c.close();
+  });
+
+  test('[UT] without a capture the camera pauses itself; «استئناف الكاميرا» brings it back (pk5)', () async {
+    final CaptureCubit c = cubit(idleAfter: const Duration(milliseconds: 120));
+    await c.start();
+    await Future<void>.delayed(const Duration(milliseconds: 60));
+    expect(c.state.idle, isFalse, reason: 'not yet');
+    await Future<void>.delayed(const Duration(milliseconds: 120));
+    expect(c.state.idle, isTrue);
+    expect(camera.paused, isTrue);
+    // While paused the shutter takes nothing.
+    await c.capture();
+    expect(camera.pictures, 0);
+    // Coming back from the background does not wake it either.
+    await c.resumeCamera();
+    expect(camera.paused, isTrue);
+    await c.wake();
+    expect(c.state.idle, isFalse);
+    expect(camera.paused, isFalse);
+    await c.close();
+  });
+
+  test('[UT] each capture or tap restarts the idle countdown', () async {
+    final CaptureCubit c = cubit(idleAfter: const Duration(milliseconds: 150));
+    await c.start();
+    for (int i = 0; i < 3; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      await c.cycleFlash();
+    }
+    expect(c.state.idle, isFalse, reason: '300 ms in, but never 150 ms without a tap');
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+    expect(c.state.idle, isTrue);
+    await c.close();
+  });
+
+  test('[UT] closing the camera step cancels the countdown and releases the camera', () async {
+    final CaptureCubit c = cubit(idleAfter: const Duration(milliseconds: 80));
+    await c.start();
+    await c.close();
+    expect(camera.disposed, isTrue);
+    await Future<void>.delayed(const Duration(milliseconds: 150));
+    expect(camera.paused, isFalse, reason: 'no pause after close');
   });
 }

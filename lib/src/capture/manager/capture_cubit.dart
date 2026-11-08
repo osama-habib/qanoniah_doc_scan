@@ -59,6 +59,13 @@ abstract class CaptureState with _$CaptureState {
     Quad? straightenQuad,
     @Default(0) int straightenTurns,
     @Default(0) int straightens,
+
+    /// The flash for the next stills (pk3).
+    @Default(ScanFlash.off) ScanFlash flash,
+
+    /// The camera paused itself after [CaptureCubit.idleAfter] without a capture,
+    /// so the phone does not heat up; «استئناف الكاميرا» wakes it (pk5).
+    @Default(false) bool idle,
   }) = _CaptureState;
 }
 
@@ -85,6 +92,9 @@ class CaptureCubit extends Cubit<CaptureState> {
     this.minLuminance = 60,
     this.rearmDistance = 0.1,
     this.rearmContentChange = 18,
+    this.idleAfter = const Duration(seconds: 10),
+    ScanFlash initialFlash = ScanFlash.off,
+    this.onFlashChanged,
   }) : _camera = camera,
        _edges = edges,
        _permissions = permissions,
@@ -100,6 +110,7 @@ class CaptureCubit extends Cubit<CaptureState> {
            hint: sessions.session.pages.isEmpty ? CaptureHint.auto : CaptureHint.nextPage,
            pageCount: sessions.session.pages.length,
            limitReached: _atLimit(sessions.session),
+           flash: initialFlash,
          ),
        );
 
@@ -120,6 +131,49 @@ class CaptureCubit extends Cubit<CaptureState> {
   final double minSharpness;
   final double minLuminance;
   final double rearmDistance;
+
+  /// Without a capture or a tap for this long the camera pauses itself (pk5).
+  final Duration idleAfter;
+
+  /// The flow keeps the flash between camera visits.
+  final void Function(ScanFlash flash)? onFlashChanged;
+
+  Timer? _idle;
+
+  /// Restarts the idle countdown: a capture or any action on the camera.
+  void _stillHere() {
+    _idle?.cancel();
+    if (isClosed || state.phase != CapturePhase.ready) return;
+    _idle = Timer(idleAfter, _sleep);
+  }
+
+  Future<void> _sleep() async {
+    if (isClosed || state.idle || state.capturing) return;
+    emit(state.copyWith(idle: true, quad: null));
+    await _camera.pause();
+  }
+
+  /// «استئناف الكاميرا» after the camera paused itself.
+  Future<void> wake() async {
+    if (!state.idle) return;
+    emit(state.copyWith(idle: false));
+    await _camera.resume();
+    _resetSteady();
+    _stillHere();
+  }
+
+  /// The flash button: off, then automatic, then always, then off again.
+  Future<void> cycleFlash() async {
+    final ScanFlash next = switch (state.flash) {
+      ScanFlash.off => ScanFlash.auto,
+      ScanFlash.auto => ScanFlash.on,
+      ScanFlash.on => ScanFlash.off,
+    };
+    emit(state.copyWith(flash: next));
+    onFlashChanged?.call(next);
+    _stillHere();
+    await _camera.setFlash(next);
+  }
 
   /// Re-arms auto capture when the frame's content changed this much (mean
   /// absolute difference of signatures, 0 to 255): a new page laid on the same
@@ -142,8 +196,11 @@ class CaptureCubit extends Cubit<CaptureState> {
     final Either<CameraFailure, Unit> opened = await _camera.initialize();
     if (isClosed) return;
     if (opened.isLeft()) return _denied(opened);
+    await _camera.setFlash(state.flash);
+    if (isClosed) return;
     emit(state.copyWith(phase: CapturePhase.ready));
     _frames = _camera.frames.listen(_onFrame);
+    _stillHere();
   }
 
   /// After the user comes back from settings or taps retry.
@@ -154,15 +211,24 @@ class CaptureCubit extends Cubit<CaptureState> {
   void setMode(CaptureMode mode) {
     _sessions.setCaptureMode(mode);
     _resetSteady();
+    _stillHere();
     emit(state.copyWith(mode: mode, hint: _idleHint(mode)));
   }
 
   Future<void> pauseCamera() => _camera.pause();
-  Future<void> resumeCamera() => _camera.resume();
+
+  /// Back from the background; a camera that paused itself stays paused.
+  Future<void> resumeCamera() async {
+    if (state.idle) return;
+    await _camera.resume();
+    _stillHere();
+  }
 
   /// Manual capture; also what auto mode calls. A manual capture stops on the
   /// corner step first; an auto capture stores the page at once.
   Future<void> capture() async {
+    if (state.idle) return;
+    _stillHere();
     if (state.capturing ||
         state.limitReached ||
         state.phase != CapturePhase.ready ||
@@ -210,6 +276,7 @@ class CaptureCubit extends Cubit<CaptureState> {
   Future<void> keepAdjusted(Quad corners) async {
     final File? raw = state.adjustFile;
     if (raw == null || state.capturing) return;
+    _stillHere();
     final int turns = state.adjustTurns;
     emit(state.copyWith(capturing: true, adjustFile: null, adjustQuad: null, adjustTurns: 0));
     _straighten(raw, corners, turns);
@@ -228,6 +295,7 @@ class CaptureCubit extends Cubit<CaptureState> {
   /// «تدوير» on the corner step: a quarter turn counter-clockwise.
   void rotateAdjusted() {
     if (state.adjustFile == null) return;
+    _stillHere();
     _rotatedByHand = true;
     emit(state.copyWith(adjustTurns: (state.adjustTurns + 3) % 4));
   }
@@ -240,6 +308,7 @@ class CaptureCubit extends Cubit<CaptureState> {
   Future<void> retakeAdjusted() async {
     final File? raw = state.adjustFile;
     if (raw == null) return;
+    _stillHere();
     emit(state.copyWith(adjustFile: null, adjustQuad: null, adjustTurns: 0));
     try {
       await raw.delete();
@@ -383,6 +452,7 @@ class CaptureCubit extends Cubit<CaptureState> {
 
   @override
   Future<void> close() async {
+    _idle?.cancel();
     await _frames?.cancel();
     await _camera.dispose();
     return super.close();

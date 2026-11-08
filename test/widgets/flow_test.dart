@@ -38,6 +38,8 @@ class JpegCamera implements CameraSource {
   }
 
   @override
+  Future<void> setFlash(ScanFlash flash) async {}
+  @override
   Future<void> pause() async {}
   @override
   Future<void> resume() async {}
@@ -124,6 +126,14 @@ void main() {
     ),
   );
 
+  /// Lets a sheet or card finish sliding in or out (camera animations never
+  /// settle, so no pumpAndSettle).
+  Future<void> frames(WidgetTester t) async {
+    for (int i = 0; i < 12; i++) {
+      await t.pump(const Duration(milliseconds: 50));
+    }
+  }
+
   /// Shutter, then «حفظ الصفحة» on the corner step.
   Future<void> capturePage(WidgetTester t) async {
     await t.tap(find.bySemanticsLabel('التقاط'));
@@ -193,22 +203,66 @@ void main() {
     expect(events.last.name, 'scan_cancelled');
   });
 
-  testWidgets('camera cancel with captured pages opens review and keeps them', (WidgetTester t) async {
+  testWidgets('[UT] «إلغاء» with pages asks «تجاهل المسح؟»: keep goes on, discard closes with nothing (pk2)', (
+    WidgetTester t,
+  ) async {
     late Future<DocScanResult?> result;
     await t.pumpWidget(host((Future<DocScanResult?> f) => result = f));
     await t.tap(find.text('scan'));
     await settle(t, find.bySemanticsLabel('التقاط'));
     await capturePage(t);
     await t.tap(find.text('إلغاء'));
-    await settle(t, find.text('اسحب الصفحة لتغيير ترتيبها في الملف.'));
+    await settle(t, find.text('تجاهل المسح؟'));
+    await frames(t);
+    // «متابعة المسح»: nothing is lost, the camera stays.
+    await t.tap(find.text('متابعة المسح'));
+    await frames(t);
+    expect(find.text('تجاهل المسح؟'), findsNothing);
+    expect(find.bySemanticsLabel('التقاط'), findsOneWidget);
     expect(sessionDirs(), hasLength(1));
     expect(events.map((DocScanEvent e) => e.name), isNot(contains('scan_cancelled')));
-    // Review's «إلغاء» still discards the scan.
-    await t.pump(const Duration(milliseconds: 300));
-    await t.tap(find.text('إلغاء').last);
+    // «تجاهل المسح»: the scan closes, nothing attached, no files left.
+    await t.tap(find.text('إلغاء'));
+    await settle(t, find.text('تجاهل المسح؟'));
+    await frames(t);
+    await t.tap(find.text('تجاهل المسح'));
     await settle(t, find.text('scan'));
     expect(await t.runAsync<DocScanResult?>(() => result), isNull);
     expect(sessionDirs(), isEmpty);
+    expect(events.last.name, 'scan_cancelled');
+  });
+
+  testWidgets('[UT] pulling the sheet down from any step closes the scan (pk2)', (WidgetTester t) async {
+    late Future<DocScanResult?> result;
+    await t.pumpWidget(host((Future<DocScanResult?> f) => result = f, recognizeText: false));
+    await t.tap(find.text('scan'));
+    await settle(t, find.bySemanticsLabel('التقاط'));
+    await capturePage(t);
+    await t.tap(find.text('حفظ (1)'));
+    await settle(t, find.text('التالي'));
+    await t.tap(find.text('التالي'));
+    await settle(t, find.text('مراجعة الصفحات'));
+    // Review: a pull from the header, past the threshold.
+    await t.dragFrom(t.getCenter(find.text('مراجعة الصفحات')), const Offset(0, 300));
+    await settle(t, find.text('تجاهل المسح؟'));
+    await frames(t);
+    await t.tap(find.text('تجاهل المسح'));
+    await settle(t, find.text('scan'));
+    expect(await t.runAsync<DocScanResult?>(() => result), isNull);
+    expect(sessionDirs(), isEmpty);
+  });
+
+  testWidgets('[UT] a short pull springs back and keeps the scan', (WidgetTester t) async {
+    await t.pumpWidget(host((Future<DocScanResult?> _) {}));
+    await t.tap(find.text('scan'));
+    await settle(t, find.bySemanticsLabel('التقاط'));
+    await t.dragFrom(t.getCenter(find.text('مسح مستند')), const Offset(0, 40));
+    await frames(t);
+    expect(find.bySemanticsLabel('التقاط'), findsOneWidget);
+    expect(find.text('تجاهل المسح؟'), findsNothing);
+    // Close the empty scan for the next test.
+    await t.tap(find.text('إلغاء'));
+    await settle(t, find.text('scan'));
   });
 
   testWidgets('without text recognition review offers only the photo PDF, and nothing is read', (WidgetTester t) async {

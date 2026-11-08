@@ -32,6 +32,8 @@ class DocScanIcons {
     required this.chevronDown,
     required this.pdf,
     String? rotate,
+    this.flash,
+    this.flashOn,
   }) : _rotate = rotate;
 
   final String close;
@@ -45,6 +47,11 @@ class DocScanIcons {
   /// which is the same glyph in the Qanoniah set.
   String get rotate => _rotate ?? retake;
   final String? _rotate;
+
+  /// The camera's flash button when the flash is off or automatic, and when it
+  /// is on (pk3). Null: the button shows its state as text only.
+  final String? flash;
+  final String? flashOn;
   final String delete;
   final String crop;
   final String filters;

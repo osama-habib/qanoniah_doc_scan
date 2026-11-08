@@ -6,10 +6,12 @@ import 'package:flutter/semantics.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../core/scan_metrics.dart';
+import '../../core/doc_scan_icons.dart';
 import '../../core/doc_scan_strings.dart';
 import '../../core/doc_scan_theme.dart';
 import '../../core/presentation/scan_widgets.dart';
 import '../../core/session/scan_session.dart';
+import '../data/camera_source.dart';
 import '../manager/capture_cubit.dart';
 import 'camera_permission_view.dart';
 import 'capture_feedback.dart';
@@ -41,7 +43,6 @@ class CameraSheet extends StatefulWidget {
 }
 
 class _CameraSheetState extends State<CameraSheet> with WidgetsBindingObserver, SingleTickerProviderStateMixin {
-  double _drag = 0;
   bool? _lastDetected;
 
   // The shot flying from the viewfinder into the page stack (design `qn-scan-shot`:
@@ -169,98 +170,217 @@ class _CameraSheetState extends State<CameraSheet> with WidgetsBindingObserver, 
           listener: _onStored,
         ),
       ],
-      child: Transform.translate(
-        offset: Offset(0, _drag),
-        child: Container(
-          decoration: BoxDecoration(
-            color: t.cameraSurface,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(t.radiusSheet)),
-          ),
-          child: Stack(
-            key: _sheetKey,
-            children: <Widget>[
-              SafeArea(
-                child: BlocBuilder<CaptureCubit, CaptureState>(
-                  // Live corners repaint only the overlay, not the sheet.
-                  buildWhen: (CaptureState a, CaptureState b) => a.copyWith(quad: b.quad, hint: b.hint) != b,
-                  builder: (BuildContext context, CaptureState st) {
-                    final CaptureCubit cubit = context.read<CaptureCubit>();
-                    return Column(
-                      children: <Widget>[
-                        GestureDetector(
-                          behavior: HitTestBehavior.opaque,
-                          onVerticalDragUpdate: (DragUpdateDetails d) =>
-                              setState(() => _drag = (_drag + d.delta.dy).clamp(0, double.infinity)),
-                          onVerticalDragEnd: (DragEndDetails d) {
-                            if (_drag > t.thumbnailSize * 2 || (d.primaryVelocity ?? 0) > 900) {
-                              widget.onCancel();
-                            } else {
-                              setState(() => _drag = 0);
-                            }
-                          },
-                          child: Column(
-                            children: <Widget>[
-                              ScanSheetHandle(color: t.onCameraSurface.withValues(alpha: 0.45)),
-                              ScanHeader(
-                                title: s.scanTitle,
-                                color: t.onCameraSurface,
-                                leading: ScanQuietButton(
-                                  label: s.cancel,
-                                  onPressed: widget.onCancel,
-                                  color: t.onCameraSurface,
-                                  textStyle: t.bodyStyle.sized(15, 22),
-                                ),
+      child: Container(
+        decoration: BoxDecoration(
+          color: t.cameraSurface,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(t.radiusSheet)),
+        ),
+        child: Stack(
+          key: _sheetKey,
+          children: <Widget>[
+            SafeArea(
+              child: BlocBuilder<CaptureCubit, CaptureState>(
+                // Live corners repaint only the overlay, not the sheet.
+                buildWhen: (CaptureState a, CaptureState b) => a.copyWith(quad: b.quad, hint: b.hint) != b,
+                builder: (BuildContext context, CaptureState st) {
+                  final CaptureCubit cubit = context.read<CaptureCubit>();
+                  return Column(
+                    children: <Widget>[
+                      // Design `scanFind` header; the sheet's grabber and pull-down
+                      // are the flow's (ScanSheet).
+                      ScanHeader(
+                        title: s.scanTitle,
+                        color: t.onCameraSurface,
+                        leading: _HeaderText(label: s.cancel, onTap: widget.onCancel),
+                        trailing: st.phase == CapturePhase.ready
+                            ? _FlashButton(flash: st.flash, strings: s, onTap: cubit.cycleFlash)
+                            : null,
+                      ),
+                      Expanded(
+                        child: st.phase == CapturePhase.ready
+                            ? _Viewfinder(
+                                key: _viewKey,
+                                state: st,
+                                preview: widget.preview,
+                                strings: s,
+                                adjusted: _adjusted,
+                                onAdjust: (Quad q) => setState(() => _adjusted = q),
+                                onWake: cubit.wake,
+                                straightening: switch (_straightening) {
+                                  (final File photo, final Quad quad, final int turns, final int id) =>
+                                    StraightenAnimation(
+                                      key: ValueKey<int>(id),
+                                      photo: photo,
+                                      quad: quad,
+                                      turns: turns,
+                                      background: t.cameraSurface,
+                                      onDone: () => setState(() => _straightening = null),
+                                    ),
+                                  null => null,
+                                },
+                              )
+                            : CameraPermissionView(
+                                phase: st.phase,
+                                strings: s,
+                                onRetry: cubit.recheckPermission,
+                                onOpenSettings: cubit.openSettings,
                               ),
-                            ],
-                          ),
+                      ),
+                      if (st.adjustFile != null)
+                        _AdjustBar(
+                          strings: s,
+                          onRotate: cubit.rotateAdjusted,
+                          onRetake: () {
+                            setState(() => _adjusted = null);
+                            unawaited(cubit.retakeAdjusted());
+                          },
+                          onKeep: () => _keep(cubit),
+                        )
+                      else
+                        _BottomBar(state: st, strings: s, onReview: widget.onReview, stackKey: _stackKey),
+                    ],
+                  );
+                },
+              ),
+            ),
+            if (_flying != null) _FlyingShot(file: _flying!, from: _flyFrom!, to: _flyTo!, animation: _fly),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The camera paused itself (pk5): a quiet screen in place of the picture and a
+/// button that brings it back.
+class _Paused extends StatelessWidget {
+  const _Paused({required this.strings, required this.onWake});
+
+  final DocScanStrings strings;
+  final VoidCallback onWake;
+
+  @override
+  Widget build(BuildContext context) {
+    final DocScanTheme t = DocScanTheme.of(context);
+    return ColoredBox(
+      color: t.cameraSurface,
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Text(
+              strings.cameraPaused,
+              style: t.bodyStyle.sized(14, 20).copyWith(color: t.onCameraSurfaceMuted),
+              textAlign: TextAlign.center,
+            ),
+            SizedBox(height: t.spaceMd),
+            Semantics(
+              button: true,
+              label: strings.resumeCamera,
+              excludeSemantics: true,
+              child: Material(
+                color: t.onCameraSurface,
+                shape: const StadiumBorder(),
+                child: InkWell(
+                  customBorder: const StadiumBorder(),
+                  onTap: onWake,
+                  child: Container(
+                    height: 44,
+                    padding: EdgeInsets.symmetric(horizontal: t.spaceLg),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        DocScanIcon(t.icons.capture, size: t.iconSize * 0.75, color: t.primary),
+                        SizedBox(width: t.spaceSm),
+                        Text(
+                          strings.resumeCamera,
+                          style: t.buttonStyle.sized(14, 20).copyWith(color: t.primary, fontWeight: FontWeight.w700),
                         ),
-                        Expanded(
-                          child: st.phase == CapturePhase.ready
-                              ? _Viewfinder(
-                                  key: _viewKey,
-                                  state: st,
-                                  preview: widget.preview,
-                                  strings: s,
-                                  adjusted: _adjusted,
-                                  onAdjust: (Quad q) => setState(() => _adjusted = q),
-                                  straightening: switch (_straightening) {
-                                    (final File photo, final Quad quad, final int turns, final int id) =>
-                                      StraightenAnimation(
-                                        key: ValueKey<int>(id),
-                                        photo: photo,
-                                        quad: quad,
-                                        turns: turns,
-                                        background: t.cameraSurface,
-                                        onDone: () => setState(() => _straightening = null),
-                                      ),
-                                    null => null,
-                                  },
-                                )
-                              : CameraPermissionView(
-                                  phase: st.phase,
-                                  strings: s,
-                                  onRetry: cubit.recheckPermission,
-                                  onOpenSettings: cubit.openSettings,
-                                ),
-                        ),
-                        if (st.adjustFile != null)
-                          _AdjustBar(
-                            strings: s,
-                            onRotate: cubit.rotateAdjusted,
-                            onRetake: () {
-                              setState(() => _adjusted = null);
-                              unawaited(cubit.retakeAdjusted());
-                            },
-                            onKeep: () => _keep(cubit),
-                          )
-                        else
-                          _BottomBar(state: st, strings: s, onReview: widget.onReview, stackKey: _stackKey),
                       ],
-                    );
-                  },
+                    ),
+                  ),
                 ),
               ),
-              if (_flying != null) _FlyingShot(file: _flying!, from: _flyFrom!, to: _flyTo!, animation: _fly),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// «إلغاء» as the design draws it: plain text against the edge, 64 wide at
+/// least and 36 high.
+class _HeaderText extends StatelessWidget {
+  const _HeaderText({required this.label, required this.onTap});
+
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final DocScanTheme t = DocScanTheme.of(context);
+    return Semantics(
+      button: true,
+      label: label,
+      excludeSemantics: true,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minWidth: 64, minHeight: 36),
+          child: Align(
+            alignment: AlignmentDirectional.centerStart,
+            widthFactor: 1,
+            child: Text(label, style: t.bodyStyle.sized(15, 22).copyWith(color: t.onCameraSurface)),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The flash (pk3): its icon with the state written beside it. Tapping goes
+/// off, automatic, on, and back to off.
+class _FlashButton extends StatelessWidget {
+  const _FlashButton({required this.flash, required this.strings, required this.onTap});
+
+  final ScanFlash flash;
+  final DocScanStrings strings;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final DocScanTheme t = DocScanTheme.of(context);
+    final String state = switch (flash) {
+      ScanFlash.auto => strings.flashAuto,
+      ScanFlash.on => strings.flashOn,
+      ScanFlash.off => strings.flashOff,
+    };
+    final String? icon = flash == ScanFlash.on ? t.icons.flashOn ?? t.icons.flash : t.icons.flash;
+    // Off reads quieter than auto and on.
+    final Color color = flash == ScanFlash.off ? t.onCameraSurfaceMuted : t.onCameraSurface;
+    return Semantics(
+      button: true,
+      label: '${strings.flash}: $state',
+      excludeSemantics: true,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minWidth: 64, minHeight: 36),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: <Widget>[
+              if (icon != null) ...<Widget>[
+                DocScanIcon(icon, size: t.iconSize * 0.75, color: color),
+                SizedBox(width: t.spaceXs),
+              ] else ...<Widget>[
+                Text(strings.flash, style: t.captionStyle.sized(13, 20).copyWith(color: color)),
+                SizedBox(width: t.spaceXs),
+              ],
+              Text(state, style: t.captionStyle.sized(13, 20).copyWith(color: color)),
             ],
           ),
         ),
@@ -277,10 +397,14 @@ class _Viewfinder extends StatelessWidget {
     required this.strings,
     required this.adjusted,
     required this.onAdjust,
+    required this.onWake,
     this.straightening,
   });
 
   final CaptureState state;
+
+  /// «استئناف الكاميرا» after the camera paused itself (pk5).
+  final VoidCallback onWake;
 
   /// The page straightening itself after capture, over everything else.
   final Widget? straightening;
@@ -348,6 +472,10 @@ class _Viewfinder extends StatelessWidget {
                 ),
               ),
             if (straightening != null) Positioned.fill(child: straightening!),
+            if (state.idle && adjust == null)
+              Positioned.fill(
+                child: _Paused(strings: strings, onWake: onWake),
+              ),
             Positioned.fill(
               child: CaptureFlash(shots: state.shots, color: t.captureFlash),
             ),

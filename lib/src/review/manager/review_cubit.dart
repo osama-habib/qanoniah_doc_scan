@@ -117,19 +117,34 @@ class ReviewCubit extends Cubit<ReviewState> {
     for (final PageFilter f in filters) {
       if (cached.containsKey(f)) continue;
       final File out = _sessions.newFile('jpg');
+      final File ocr = _sessions.newFile('png');
       final Either<StorageFailure, Unit> r = await _preparer.prepare(
         raw: page.rawFile,
         corners: page.corners,
         filters: <PageFilter>{f},
         prepared: out,
-        ocrInput: _sessions.newFile('png'),
+        ocrInput: ocr,
         turns: page.turns,
         longEdge: previewEdge,
       );
-      if (isClosed) break;
+      // A preview is read by no one: drop its recognition input at once, and the
+      // preview itself when the screen closed meanwhile (the scan may be gone).
+      await _deleteQuietly(ocr);
+      if (isClosed) {
+        await _deleteQuietly(out);
+        break;
+      }
       if (r.isRight()) cached[f] = out;
     }
     return Map<PageFilter, File>.of(cached);
+  }
+
+  static Future<void> _deleteQuietly(File f) async {
+    try {
+      if (f.existsSync()) await f.delete();
+    } on FileSystemException {
+      // Already gone with its session.
+    }
   }
 
   /// Long edge of a filter preview, in pixels.
