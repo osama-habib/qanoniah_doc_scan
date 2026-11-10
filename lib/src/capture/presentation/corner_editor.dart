@@ -217,17 +217,27 @@ class _CornerEditorState extends State<CornerEditor> {
                     builder: (BuildContext context) {
                       final Offset at = px(focus);
                       final double up = at.dy - lift - lens / 2 < -lift / 2 ? -lift : lift;
+                      // Design 03-b: 2.6x, with a dot in the middle on the
+                      // exact corner.
                       return Positioned(
                         left: at.dx - lens / 2,
                         top: at.dy - up - lens / 2,
                         child: IgnorePointer(
                           child: RawMagnifier(
                             size: const Size(lens, lens),
-                            magnificationScale: 2,
+                            magnificationScale: 2.6,
                             focalPointOffset: Offset(0, up),
                             decoration: MagnifierDecoration(
                               shape: CircleBorder(side: BorderSide(color: t.frameDetected, width: 2)),
                               shadows: <BoxShadow>[BoxShadow(color: t.scrim.withValues(alpha: 0.35), blurRadius: 8)],
+                            ),
+                            child: Center(
+                              child: Container(
+                                key: const ValueKey<String>('loupe-dot'),
+                                width: t.spaceXs + 2,
+                                height: t.spaceXs + 2,
+                                decoration: BoxDecoration(color: t.frameDetected, shape: BoxShape.circle),
+                              ),
                             ),
                           ),
                         ),

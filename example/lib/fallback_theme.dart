@@ -20,6 +20,7 @@ const Color _gray500 = Color(0xff6b7280);
 const Color _gray800 = Color(0xff1f2937);
 const Color _gray900 = Color(0xff111827);
 const Color _red600 = Color(0xffdc2626);
+const Color _yellow400 = Color(0xfffacc15);
 
 TextStyle _text(double size, FontWeight weight, double height) => TextStyle(
   fontFamily: _font,
@@ -50,6 +51,7 @@ final DocScanTheme fallbackTheme = DocScanTheme(
   canvas: Color(0xffe5e7eb),
   surfaceTertiary: Color(0xfff3f4f6),
   inverseSurface: Color(0xff111827),
+  torchActive: _yellow400,
   titleStyle: _text(18, FontWeight.w600, 28),
   bodyStyle: _text(16, FontWeight.w400, 24),
   bodyStrongStyle: _text(16, FontWeight.w500, 24),

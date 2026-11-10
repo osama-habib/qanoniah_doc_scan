@@ -39,7 +39,7 @@ void main() {
   CaptureCubit cubit({
     String? replacing,
     Duration? idleAfter,
-    ScanFlash initialFlash = ScanFlash.auto,
+    ScanFlash initialFlash = ScanFlash.off,
     void Function(ScanFlash)? onFlashChanged,
   }) => CaptureCubit(
     camera: camera,
@@ -284,7 +284,7 @@ void main() {
     await c.close();
   });
 
-  test('[UT] a new scan starts with the flash on «تلقائي»', () async {
+  test('[UT] a new scan starts with the torch off (design 02-c)', () async {
     final CaptureCubit c = CaptureCubit(
       camera: camera,
       edges: edges,
@@ -295,7 +295,7 @@ void main() {
       onEvent: events.add,
     );
     await c.start();
-    expect((c.state.flash, camera.flash), (ScanFlash.auto, ScanFlash.auto));
+    expect((c.state.flash, camera.flash), (ScanFlash.off, ScanFlash.off));
     expect(c.state.hasFlash, isTrue);
     await c.close();
   });
@@ -305,6 +305,25 @@ void main() {
     final CaptureCubit c = cubit();
     await c.start();
     expect(c.state.hasFlash, isFalse);
+    await c.close();
+  });
+
+  test('[UT] «الكشاف» turns the steady light on and off; the flow keeps the choice', () async {
+    final List<ScanFlash> told = <ScanFlash>[];
+    final CaptureCubit c = cubit(onFlashChanged: told.add);
+    await c.start();
+    await c.toggleTorch();
+    expect((c.state.flash, camera.flash), (ScanFlash.torch, ScanFlash.torch));
+    await c.toggleTorch();
+    expect((c.state.flash, camera.flash), (ScanFlash.off, ScanFlash.off));
+    expect(told, <ScanFlash>[ScanFlash.torch, ScanFlash.off]);
+    await c.close();
+  });
+
+  test('[UT] a camera visit opens with the torch the user left on', () async {
+    final CaptureCubit c = cubit(initialFlash: ScanFlash.torch);
+    await c.start();
+    expect(camera.flash, ScanFlash.torch);
     await c.close();
   });
 

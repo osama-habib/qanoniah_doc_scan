@@ -154,7 +154,7 @@ class _DocScanFlowState extends State<DocScanFlow> {
   CameraSource? _camera;
 
   /// The flash the user chose, kept between camera visits.
-  ScanFlash _flash = ScanFlash.auto;
+  ScanFlash _flash = ScanFlash.off;
   BuildOutput? _built;
   PreviewCubit? _preview;
   bool _closing = false;

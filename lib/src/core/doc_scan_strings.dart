@@ -55,6 +55,8 @@ class DocScanStrings {
     required this.flashOff,
     required this.flashLabel,
     required this.flashNote,
+    required this.torchTurnOn,
+    required this.torchTurnOff,
     required this.cameraPaused,
     required this.resumeCamera,
     required this.discardTitle,
@@ -171,6 +173,10 @@ class DocScanStrings {
 
   /// Shown for about a second after the flash changes: «الفلاش: تلقائي».
   final String Function(String state) flashNote;
+
+  /// «الكشاف» button's description, the action it does now (design 02-c).
+  final String torchTurnOn;
+  final String torchTurnOff;
 
   /// The camera paused itself after a while without a capture.
   final String cameraPaused;
@@ -311,6 +317,8 @@ class DocScanStrings {
       flashOff: 'إيقاف',
       flashLabel: (String state) => 'الفلاش، $state',
       flashNote: (String state) => 'الفلاش: $state',
+      torchTurnOn: 'تشغيل الكشاف',
+      torchTurnOff: 'إيقاف الكشاف',
       cameraPaused: 'توقفت الكاميرا لتوفير البطارية',
       resumeCamera: 'استئناف الكاميرا',
       discardTitle: 'تجاهل المسح؟',
@@ -423,6 +431,8 @@ class DocScanStrings {
       flashOff: 'Off',
       flashLabel: (String state) => 'Flash, $state',
       flashNote: (String state) => 'Flash: $state',
+      torchTurnOn: 'Turn torch on',
+      torchTurnOff: 'Turn torch off',
       cameraPaused: 'The camera paused to save battery',
       resumeCamera: 'Resume camera',
       discardTitle: 'Discard this scan?',
@@ -530,6 +540,8 @@ class DocScanStrings {
     String? flashOff,
     String Function(String state)? flashLabel,
     String Function(String state)? flashNote,
+    String? torchTurnOn,
+    String? torchTurnOff,
     String? cameraPaused,
     String? resumeCamera,
     String? discardTitle,
@@ -633,6 +645,8 @@ class DocScanStrings {
       flashOff: flashOff ?? this.flashOff,
       flashLabel: flashLabel ?? this.flashLabel,
       flashNote: flashNote ?? this.flashNote,
+      torchTurnOn: torchTurnOn ?? this.torchTurnOn,
+      torchTurnOff: torchTurnOff ?? this.torchTurnOff,
       cameraPaused: cameraPaused ?? this.cameraPaused,
       resumeCamera: resumeCamera ?? this.resumeCamera,
       discardTitle: discardTitle ?? this.discardTitle,

@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:qanoniah_doc_scan/qanoniah_doc_scan.dart';
 import 'package:qanoniah_doc_scan/src/capture/data/edge_detector.dart';
@@ -16,7 +17,7 @@ import '../fakes/fake_edge_detector.dart';
 import '../fakes/fake_text_recognizer.dart';
 import '../helpers/test_host.dart';
 
-/// The flash button on the camera (ClickUp z8y71x6uuw).
+/// «الكشاف» on the camera (design 02-c; ClickUp z8y71x6uuw).
 void main() {
   late Directory tmp;
   late ScanSessionRepo sessions;
@@ -50,6 +51,8 @@ void main() {
     flash: 'flash-auto.svg',
     flashOn: 'flash-on.svg',
     flashOff: 'flash-off.svg',
+    torchOn: 'torch-on.svg',
+    torchOff: 'torch-off.svg',
   );
 
   setUp(() async {
@@ -82,9 +85,7 @@ void main() {
       testApp(
         Builder(
           builder: (BuildContext context) => Theme(
-            data: Theme.of(context).copyWith(
-              extensions: <ThemeExtension<dynamic>>[testTheme.copyWith(icons: icons)],
-            ),
+            data: Theme.of(context).copyWith(extensions: <ThemeExtension<dynamic>>[testTheme.copyWith(icons: icons)]),
             child: Scaffold(
               body: BlocProvider<CaptureCubit>.value(
                 value: cubit,
@@ -104,8 +105,20 @@ void main() {
     return cubit;
   }
 
-  Finder glyph(String asset) =>
-      find.byWidgetPredicate((Widget w) => w is DocScanIcon && w.assetPath == asset);
+  Finder glyph(String asset) => find.byWidgetPredicate((Widget w) => w is DocScanIcon && w.assetPath == asset);
+
+  // The on glyph keeps its own colors: drawn without a tint.
+  Finder ownColors(String asset) => find.byWidgetPredicate(
+    (Widget w) =>
+        w is SvgPicture && w.bytesLoader is SvgAssetLoader && (w.bytesLoader as SvgAssetLoader).assetName == asset,
+  );
+
+  Color disc(WidgetTester t) {
+    final AnimatedContainer c = t.widget<AnimatedContainer>(
+      find.descendant(of: find.bySemanticsLabel(RegExp('الكشاف')), matching: find.byType(AnimatedContainer)),
+    );
+    return (c.decoration! as BoxDecoration).color!;
+  }
 
   Future<void> close(WidgetTester t, CaptureCubit cubit) async {
     // Unmount before closing: a cubit still watched closes only as frames pump.
@@ -113,58 +126,54 @@ void main() {
     await t.runAsync(cubit.close);
   }
 
-  testWidgets('[UT] a scan opens on «تلقائي»; taps go on, off, auto, each with its own glyph', (WidgetTester t) async {
+  testWidgets('[UT] a scan opens with the torch off; a tap turns it on, yellow, and another off', (
+    WidgetTester t,
+  ) async {
     final CaptureCubit cubit = await pump(t);
-    expect(find.bySemanticsLabel('الفلاش، تلقائي'), findsOneWidget, reason: 'a new scan starts automatic');
-    expect(glyph('flash-auto.svg'), findsOneWidget);
+    expect(find.bySemanticsLabel('تشغيل الكشاف'), findsOneWidget, reason: 'off: the button says what a tap does');
+    expect(glyph('torch-off.svg'), findsOneWidget);
+    expect(disc(t), testTheme.onCameraSurface.withValues(alpha: 0.16));
 
-    await t.tap(find.bySemanticsLabel('الفلاش، تلقائي'));
-    await t.pump();
-    expect(find.bySemanticsLabel('الفلاش، تشغيل'), findsOneWidget);
-    expect(glyph('flash-on.svg'), findsOneWidget);
+    await t.tap(find.bySemanticsLabel('تشغيل الكشاف'));
+    await t.pump(const Duration(milliseconds: 250));
+    expect(find.bySemanticsLabel('إيقاف الكشاف'), findsOneWidget);
+    expect(ownColors('torch-on.svg'), findsOneWidget);
+    expect(disc(t), testTheme.torchActive, reason: 'the yellow disc');
+    expect(
+      t.getSemantics(find.bySemanticsLabel('إيقاف الكشاف')),
+      containsSemantics(hasToggledState: true, isToggled: true),
+    );
 
-    await t.tap(find.bySemanticsLabel('الفلاش، تشغيل'));
-    await t.pump();
-    expect(find.bySemanticsLabel('الفلاش، إيقاف'), findsOneWidget);
-    expect(glyph('flash-off.svg'), findsOneWidget);
-
-    await t.tap(find.bySemanticsLabel('الفلاش، إيقاف'));
-    await t.pump();
-    expect(find.bySemanticsLabel('الفلاش، تلقائي'), findsOneWidget, reason: 'back to the start');
+    await t.tap(find.bySemanticsLabel('إيقاف الكشاف'));
+    await t.pump(const Duration(milliseconds: 250));
+    expect(find.bySemanticsLabel('تشغيل الكشاف'), findsOneWidget, reason: 'back off');
     await close(t, cubit);
   });
 
-  testWidgets('[UT] the button is 44 x 44 to touch', (WidgetTester t) async {
+  testWidgets('[UT] a 36 disc, 44 x 44 to touch', (WidgetTester t) async {
     final CaptureCubit cubit = await pump(t);
-    final Size size = t.getSize(find.bySemanticsLabel('الفلاش، تلقائي'));
-    expect(size.width, greaterThanOrEqualTo(44));
-    expect(size.height, greaterThanOrEqualTo(44));
+    final Size touch = t.getSize(find.bySemanticsLabel('تشغيل الكشاف'));
+    expect(touch, const Size(44, 44));
+    final Size seen = t.getSize(
+      find.descendant(of: find.bySemanticsLabel('تشغيل الكشاف'), matching: find.byType(AnimatedContainer)),
+    );
+    expect(seen, const Size(36, 36));
     await close(t, cubit);
   });
 
-  testWidgets('[UT] the new state shows as «الفلاش: …» for about a second, only after a change', (WidgetTester t) async {
+  testWidgets('[UT] no note over the picture when the torch changes (the design shows none)', (WidgetTester t) async {
     final CaptureCubit cubit = await pump(t);
-    double opacity() => t
-        .widget<AnimatedOpacity>(
-          find.ancestor(of: find.textContaining('الفلاش:'), matching: find.byType(AnimatedOpacity)),
-        )
-        .opacity;
-    expect(find.textContaining('الفلاش:'), findsNothing, reason: 'nothing before the first change');
-
-    await t.tap(find.bySemanticsLabel('الفلاش، تلقائي'));
+    await t.tap(find.bySemanticsLabel('تشغيل الكشاف'));
     await t.pump();
-    expect(find.text('الفلاش: تشغيل'), findsOneWidget);
-    expect(opacity(), 1);
-
-    await t.pump(const Duration(milliseconds: 1300));
-    expect(opacity(), 0, reason: 'gone after about a second');
+    expect(find.textContaining('الفلاش'), findsNothing);
+    expect(find.textContaining('الكشاف'), findsNothing);
     await close(t, cubit);
   });
 
-  testWidgets('[UT] no flash button on a camera without a flash', (WidgetTester t) async {
+  testWidgets('[UT] no torch button on a camera without a light', (WidgetTester t) async {
     final CaptureCubit cubit = await pump(t, hasFlash: false);
-    expect(find.bySemanticsLabel(RegExp('^الفلاش')), findsNothing);
-    expect(glyph('flash-auto.svg'), findsNothing);
+    expect(find.bySemanticsLabel(RegExp('الكشاف')), findsNothing);
+    expect(glyph('torch-off.svg'), findsNothing);
     await close(t, cubit);
   });
 }

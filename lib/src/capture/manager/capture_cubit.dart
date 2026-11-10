@@ -62,7 +62,7 @@ abstract class CaptureState with _$CaptureState {
 
     /// The flash for the next stills (pk3); automatic at the start of a scan
     /// (z8y71x6uuw).
-    @Default(ScanFlash.auto) ScanFlash flash,
+    @Default(ScanFlash.off) ScanFlash flash,
 
     /// False on a camera without a flash: the flash button hides.
     @Default(true) bool hasFlash,
@@ -102,7 +102,7 @@ class CaptureCubit extends Cubit<CaptureState> {
     this.rearmDistance = 0.1,
     this.rearmContentChange = 18,
     this.idleAfter,
-    ScanFlash initialFlash = ScanFlash.auto,
+    ScanFlash initialFlash = ScanFlash.off,
     this.onFlashChanged,
   }) : _camera = camera,
        _edges = edges,
@@ -176,14 +176,19 @@ class CaptureCubit extends Cubit<CaptureState> {
     _stillHere();
   }
 
-  /// The flash button: automatic, then on, then off, then automatic again
-  /// (z8y71x6uuw).
-  Future<void> cycleFlash() async {
-    final ScanFlash next = switch (state.flash) {
-      ScanFlash.auto => ScanFlash.on,
-      ScanFlash.on => ScanFlash.off,
-      ScanFlash.off => ScanFlash.auto,
-    };
+  /// «الكشاف» (design 02-c): the steady light on or off.
+  Future<void> toggleTorch() => _setLight(state.flash == ScanFlash.torch ? ScanFlash.off : ScanFlash.torch);
+
+  // TODO(unused): the three-state still flash (z8y71x6uuw) before the torch
+  // design (02-c, 2026-11-10); kept in case a host wants it back.
+  /// The flash button: automatic, then on, then off, then automatic again.
+  Future<void> cycleFlash() => _setLight(switch (state.flash) {
+    ScanFlash.auto => ScanFlash.on,
+    ScanFlash.on => ScanFlash.off,
+    ScanFlash.off || ScanFlash.torch => ScanFlash.auto,
+  });
+
+  Future<void> _setLight(ScanFlash next) async {
     emit(state.copyWith(flash: next));
     onFlashChanged?.call(next);
     _stillHere();

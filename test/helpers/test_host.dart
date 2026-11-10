@@ -61,6 +61,7 @@ const DocScanTheme testTheme = DocScanTheme(
   canvas: Color(0xffe5e7eb),
   surfaceTertiary: Color(0xfff3f4f6),
   inverseSurface: Color(0xff111827),
+  torchActive: Color(0xfffacc15),
   titleStyle: _s,
   bodyStyle: _s,
   bodyStrongStyle: _s,

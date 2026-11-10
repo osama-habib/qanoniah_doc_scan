@@ -20,9 +20,11 @@ class CameraFrame {
   final int height;
 }
 
-/// The flash for stills (pk3): fires when the scene is dark, always, or never.
-/// The button cycles them in this order (ClickUp z8y71x6uuw).
-enum ScanFlash { auto, on, off }
+/// The camera's light. [torch] is the design's «الكشاف» (02-c, 2026-11-10): a
+/// steady light while scanning, not a flash for the still; the button turns it
+/// on and [off]. [auto] and [on] are the still flash of the earlier three-state
+/// button (pk3, z8y71x6uuw), kept for a host that wants it back.
+enum ScanFlash { auto, on, off, torch }
 
 /// The camera, behind a port so capture logic is testable without hardware
 /// (constitution P5).
@@ -80,6 +82,7 @@ class CameraPluginSource implements CameraSource {
     ScanFlash.auto => FlashMode.auto,
     ScanFlash.on => FlashMode.always,
     ScanFlash.off => FlashMode.off,
+    ScanFlash.torch => FlashMode.torch,
   };
 
   @override

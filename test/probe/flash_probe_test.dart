@@ -21,9 +21,10 @@ import '../fakes/fake_edge_detector.dart';
 import '../fakes/fake_text_recognizer.dart';
 import '../helpers/test_host.dart';
 
-/// Host probe: the camera header's flash button in each state, and the note
-/// after a change, to PROBE_OUT. The flash glyphs come from PROBE_FLASH_ICONS
-/// (flash.svg, flash_filled.svg, flash_slash.svg), the host's own files.
+/// Host probe: the camera header's torch button off and on (design 02-c), to
+/// PROBE_OUT. The glyphs come from PROBE_FLASH_ICONS (flash.svg,
+/// flash_filled.svg, flash_slash.svg, torch_on.svg, torch_off.svg), the host's
+/// own files.
 /// Skips without both.
 final Map<String, String> env = Platform.environment;
 
@@ -78,6 +79,8 @@ void main() {
       flash: 'probe-icons/flash.svg',
       flashOn: 'probe-icons/flash_filled.svg',
       flashOff: 'probe-icons/flash_slash.svg',
+      torchOn: 'probe-icons/torch_on.svg',
+      torchOff: 'probe-icons/torch_off.svg',
     );
     final ScanSessionRepo sessions = ScanSessionRepo(tempRoot: () async => tmp);
     await t.runAsync(sessions.start);
@@ -145,14 +148,9 @@ void main() {
       print('[SHOT] $name');
     }
 
-    await shot('flash_1_auto');
-    await t.tap(find.bySemanticsLabel('الفلاش، تلقائي'));
-    await shot('flash_2_on_note');
-    await t.pump(const Duration(seconds: 2));
-    await shot('flash_3_on');
-    await t.tap(find.bySemanticsLabel('الفلاش، تشغيل'));
-    await t.pump(const Duration(seconds: 2));
-    await shot('flash_4_off');
+    await shot('torch_1_off');
+    await t.tap(find.bySemanticsLabel('تشغيل الكشاف'));
+    await shot('torch_2_on');
     await t.pumpWidget(const SizedBox());
     await t.runAsync(cubit.close);
     recognition.dispose();

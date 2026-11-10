@@ -43,7 +43,7 @@ class FakeCameraSource implements CameraSource {
   }
 
   /// The last flash the capture asked for.
-  ScanFlash flash = ScanFlash.auto;
+  ScanFlash flash = ScanFlash.off;
 
   @override
   final bool hasFlash;

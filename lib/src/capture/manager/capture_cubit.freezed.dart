@@ -484,7 +484,7 @@ class _$CaptureStateImpl implements _CaptureState {
     this.straightenQuad,
     this.straightenTurns = 0,
     this.straightens = 0,
-    this.flash = ScanFlash.auto,
+    this.flash = ScanFlash.off,
     this.hasFlash = true,
     this.idle = false,
     this.cameraOff = false,

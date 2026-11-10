@@ -83,6 +83,9 @@ void main() {
     await g.moveBy(const Offset(10, 10));
     await t.pump();
     expect(find.byType(RawMagnifier), findsOneWidget);
+    // Design 03-b: 2.6x, a dot on the exact corner.
+    expect(t.widget<RawMagnifier>(find.byType(RawMagnifier)).magnificationScale, 2.6);
+    expect(find.byKey(const ValueKey<String>('loupe-dot')), findsOneWidget);
     await g.up();
     await t.pump();
     expect(find.byType(RawMagnifier), findsNothing);

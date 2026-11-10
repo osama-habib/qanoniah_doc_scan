@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../core/scan_metrics.dart';
 import '../../core/doc_scan_icons.dart';
@@ -194,7 +195,7 @@ class _CameraSheetState extends State<CameraSheet> with WidgetsBindingObserver, 
                         leading: _HeaderText(label: s.cancel, onTap: widget.onCancel),
                         // Hidden on a camera without a flash (z8y71x6uuw).
                         trailing: st.phase == CapturePhase.ready && st.hasFlash
-                            ? _FlashButton(flash: st.flash, strings: s, onTap: cubit.cycleFlash)
+                            ? _TorchButton(on: st.flash == ScanFlash.torch, strings: s, onTap: cubit.toggleTorch)
                             : null,
                       ),
                       Expanded(
@@ -341,10 +342,77 @@ class _HeaderText extends StatelessWidget {
   }
 }
 
+/// «الكشاف» (design 02-c, 2026-11-10): a 36 disc opposite «إلغاء», 44 to
+/// touch. Off: translucent with the struck-out glyph in the camera's text
+/// color; on: the yellow disc with the filled glyph in its own colors. Screen
+/// readers hear what a tap does: «تشغيل الكشاف» or «إيقاف الكشاف».
+class _TorchButton extends StatelessWidget {
+  const _TorchButton({required this.on, required this.strings, required this.onTap});
+
+  final bool on;
+  final DocScanStrings strings;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final DocScanTheme t = DocScanTheme.of(context);
+    final DocScanIcons icons = t.icons;
+    final String? onGlyph = icons.torchOn ?? icons.flashOn ?? icons.flash;
+    final String? offGlyph = icons.torchOff ?? icons.flashOff ?? icons.flash;
+    final Widget glyph = switch ((on, onGlyph, offGlyph)) {
+      // The design's on glyph carries its own colors (a dark body, a yellow slit).
+      (true, final String g?, _) when icons.torchOn != null => SvgPicture.asset(
+        g,
+        width: ScanMetrics.torchGlyph,
+        height: ScanMetrics.torchGlyph,
+      ),
+      (true, final String g?, _) => DocScanIcon(g, size: ScanMetrics.torchGlyph, color: t.inverseSurface),
+      (false, _, final String g?) => DocScanIcon(g, size: ScanMetrics.torchGlyph, color: t.onCameraSurface),
+      // No glyph from the host: the action as text.
+      _ => Text(
+        on ? strings.flashOn : strings.flashOff,
+        style: t.captionStyle.sized(10, 12).copyWith(color: on ? t.inverseSurface : t.onCameraSurface),
+        maxLines: 1,
+        overflow: TextOverflow.clip,
+      ),
+    };
+    return Semantics(
+      button: true,
+      toggled: on,
+      label: on ? strings.torchTurnOff : strings.torchTurnOn,
+      excludeSemantics: true,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: SizedBox.square(
+          dimension: ScanMetrics.headerRow,
+          child: Center(
+            child: AnimatedContainer(
+              // Design: the disc's color eases over 200 ms.
+              duration: const Duration(milliseconds: 200),
+              width: ScanMetrics.roundButton,
+              height: ScanMetrics.roundButton,
+              decoration: BoxDecoration(
+                color: on ? t.torchActive : t.onCameraSurface.withValues(alpha: 0.16),
+                shape: BoxShape.circle,
+              ),
+              alignment: Alignment.center,
+              child: glyph,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// TODO(unused): the three-state still flash (z8y71x6uuw) before the torch
+// design (02-c, 2026-11-10); kept in case a host wants it back.
 /// The flash (pk3, z8y71x6uuw): a camera icon button like «تدوير», one glyph
 /// per state, 44 x 44 to touch. «تشغيل» is a light disc so it reads apart from
 /// «إيقاف» at a glance; the state's name shows for a second on change
 /// ([_FlashNote]). Tapping goes automatic, on, off, and back to automatic.
+// ignore: unused_element
 class _FlashButton extends StatelessWidget {
   const _FlashButton({required this.flash, required this.strings, required this.onTap});
 
@@ -359,11 +427,11 @@ class _FlashButton extends StatelessWidget {
     final bool on = flash == ScanFlash.on;
     final String? icon = switch (flash) {
       ScanFlash.auto => icons.flash,
-      ScanFlash.on => icons.flashOn ?? icons.flash,
+      ScanFlash.on || ScanFlash.torch => icons.flashOn ?? icons.flash,
       ScanFlash.off => icons.flashOff ?? icons.flash,
     };
     final Color fg = switch (flash) {
-      ScanFlash.on => t.cameraSurface,
+      ScanFlash.on || ScanFlash.torch => t.cameraSurface,
       ScanFlash.auto => t.onCameraSurface,
       ScanFlash.off => t.onCameraSurfaceMuted,
     };
@@ -404,13 +472,16 @@ class _FlashButton extends StatelessWidget {
 
 String _flashState(DocScanStrings s, ScanFlash f) => switch (f) {
   ScanFlash.auto => s.flashAuto,
-  ScanFlash.on => s.flashOn,
+  ScanFlash.on || ScanFlash.torch => s.flashOn,
   ScanFlash.off => s.flashOff,
 };
 
+// TODO(unused): the design's torch (02-c) shows no note; kept with the
+// three-state flash it belonged to.
 /// «الفلاش: تلقائي» over the top of the picture for a second after the user
 /// changes the flash (z8y71x6uuw), in the hint's style. Not on the first frame:
 /// only a change shows it.
+// ignore: unused_element
 class _FlashNote extends StatefulWidget {
   const _FlashNote({required this.strings});
 
@@ -562,12 +633,6 @@ class _Viewfinder extends StatelessWidget {
               ),
             Positioned.fill(
               child: CaptureFlash(shots: state.shots, color: t.captureFlash),
-            ),
-            PositionedDirectional(
-              top: t.spaceMd,
-              start: t.spaceMd,
-              end: t.spaceMd,
-              child: Center(child: _FlashNote(strings: strings)),
             ),
             if (message != null)
               PositionedDirectional(

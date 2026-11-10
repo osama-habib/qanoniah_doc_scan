@@ -32,6 +32,7 @@ class DocScanTheme extends ThemeExtension<DocScanTheme> {
     required this.canvas,
     required this.surfaceTertiary,
     required this.inverseSurface,
+    required this.torchActive,
     required this.titleStyle,
     required this.bodyStyle,
     required this.bodyStrongStyle,
@@ -84,6 +85,10 @@ class DocScanTheme extends ThemeExtension<DocScanTheme> {
 
   /// The floating selection bar (design #111827).
   final Color inverseSurface;
+
+  /// «الكشاف» while it is on: the button's disc (design 02-c #facc15, kit
+  /// yellow-400).
+  final Color torchActive;
 
   final TextStyle titleStyle;
   final TextStyle bodyStyle;
@@ -145,6 +150,7 @@ class DocScanTheme extends ThemeExtension<DocScanTheme> {
     Color? canvas,
     Color? surfaceTertiary,
     Color? inverseSurface,
+    Color? torchActive,
     TextStyle? titleStyle,
     TextStyle? bodyStyle,
     TextStyle? bodyStrongStyle,
@@ -185,6 +191,7 @@ class DocScanTheme extends ThemeExtension<DocScanTheme> {
       canvas: canvas ?? this.canvas,
       surfaceTertiary: surfaceTertiary ?? this.surfaceTertiary,
       inverseSurface: inverseSurface ?? this.inverseSurface,
+      torchActive: torchActive ?? this.torchActive,
       titleStyle: titleStyle ?? this.titleStyle,
       bodyStyle: bodyStyle ?? this.bodyStyle,
       bodyStrongStyle: bodyStrongStyle ?? this.bodyStrongStyle,
@@ -233,6 +240,7 @@ class DocScanTheme extends ThemeExtension<DocScanTheme> {
       canvas: c(canvas, other.canvas),
       surfaceTertiary: c(surfaceTertiary, other.surfaceTertiary),
       inverseSurface: c(inverseSurface, other.inverseSurface),
+      torchActive: c(torchActive, other.torchActive),
       titleStyle: s(titleStyle, other.titleStyle),
       bodyStyle: s(bodyStyle, other.bodyStyle),
       bodyStrongStyle: s(bodyStrongStyle, other.bodyStrongStyle),

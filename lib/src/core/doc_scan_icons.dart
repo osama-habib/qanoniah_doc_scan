@@ -35,6 +35,8 @@ class DocScanIcons {
     this.flash,
     this.flashOn,
     this.flashOff,
+    this.torchOn,
+    this.torchOff,
   }) : _rotate = rotate;
 
   final String close;
@@ -55,6 +57,12 @@ class DocScanIcons {
   final String? flash;
   final String? flashOn;
   final String? flashOff;
+
+  /// «الكشاف» on and off (design 02-c). [torchOn] is drawn in its own colors
+  /// on the yellow disc; [torchOff] takes the camera's text color. Missing ones
+  /// fall back to [flashOn] and [flashOff], then to [flash], then to text.
+  final String? torchOn;
+  final String? torchOff;
   final String delete;
   final String crop;
   final String filters;

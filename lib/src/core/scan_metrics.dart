@@ -23,6 +23,10 @@ abstract final class ScanMetrics {
   static const double headerGap = 12;
   static const double headerGroupGap = 8;
 
+  /// The design's round header buttons (36) and the torch's glyph in them (20).
+  static const double roundButton = 36;
+  static const double torchGlyph = 20;
+
   /// «توضيح الصفحات»'s header: 10 below.
   static const EdgeInsets filtersHeader = EdgeInsets.fromLTRB(16, 22, 16, 10);
   static const EdgeInsets cameraBar = EdgeInsets.fromLTRB(24, 12, 24, 16);
