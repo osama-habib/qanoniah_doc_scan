@@ -60,19 +60,17 @@ abstract final class DocScan {
     try {
       return await Navigator.of(context, rootNavigator: true).push<DocScanResult>(
         // Design `qn-scan-in`: the sheet slides up over 420 ms.
+        // Not opaque: the screen the scan was opened from stays painted under
+        // the sheet, so a pull down shows it (owner, 2026-11-10). The sheet
+        // slides and the dim fades in ScanSheet, from this route's animation.
         PageRouteBuilder<DocScanResult>(
+          opaque: false,
           fullscreenDialog: true,
           transitionDuration: const Duration(milliseconds: 420),
           reverseTransitionDuration: const Duration(milliseconds: 300),
           pageBuilder: (BuildContext _, Animation<double> _, Animation<double> _) =>
               DocScanFlow(config: config, strings: strings, deps: (debugDeps ?? ScanFlowDeps.platform)()),
-          transitionsBuilder: (BuildContext _, Animation<double> a, Animation<double> _, Widget child) =>
-              SlideTransition(
-                position: Tween<Offset>(begin: const Offset(0, 1), end: Offset.zero).animate(
-                  CurvedAnimation(parent: a, curve: const Cubic(0.32, 0.72, 0, 1), reverseCurve: Curves.easeIn),
-                ),
-                child: child,
-              ),
+          transitionsBuilder: (BuildContext _, Animation<double> _, Animation<double> _, Widget child) => child,
         ),
       );
     } finally {
@@ -342,8 +340,9 @@ class _DocScanFlowState extends State<DocScanFlow> {
         unawaited(_requestClose());
       },
       child: Scaffold(
-        backgroundColor: _step == _Step.camera ? t.cameraSurface : t.surface,
+        backgroundColor: t.scrim.withValues(alpha: 0),
         body: ScanSheet(
+          color: _step == _Step.camera || _step == _Step.filters ? t.cameraSurface : t.surface,
           handleColor: _step == _Step.camera || _step == _Step.filters
               ? t.onCameraSurface.withValues(alpha: 0.45)
               : t.border,

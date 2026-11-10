@@ -108,6 +108,16 @@ void main() {
     expect(f, findsWidgets);
   }
 
+  /// Until the scan's route has gone. The app's own «scan» button stays on
+  /// screen under the sheet, so it no longer tells the scan closed.
+  Future<void> closed(WidgetTester t) async {
+    for (int i = 0; i < 100 && find.byType(DocScanFlow).evaluate().isNotEmpty; i++) {
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      await t.pump(const Duration(milliseconds: 50));
+    }
+    expect(find.byType(DocScanFlow), findsNothing);
+  }
+
   List<String> sessionDirs() => tmp
       .listSync(recursive: true)
       .whereType<Directory>()
@@ -198,7 +208,7 @@ void main() {
     await settle(t, find.bySemanticsLabel('التقاط'));
     expect(() => DocScan.start(ctx, config()), throwsStateError);
     await t.tap(find.text('إلغاء'));
-    await settle(t, find.text('scan'));
+    await closed(t);
     final DocScanResult? r = await t.runAsync<DocScanResult?>(() => result);
     expect(r, isNull);
     expect(sessionDirs(), isEmpty);
@@ -228,7 +238,7 @@ void main() {
     await settle(t, find.text('تجاهل المسح؟'));
     await frames(t);
     await t.tap(find.text('تجاهل المسح'));
-    await settle(t, find.text('scan'));
+    await closed(t);
     expect(await t.runAsync<DocScanResult?>(() => result), isNull);
     expect(sessionDirs(), isEmpty);
     expect(events.last.name, 'scan_cancelled');
@@ -249,9 +259,28 @@ void main() {
     await settle(t, find.text('تجاهل المسح؟'));
     await frames(t);
     await t.tap(find.text('تجاهل المسح'));
-    await settle(t, find.text('scan'));
+    await closed(t);
     expect(await t.runAsync<DocScanResult?>(() => result), isNull);
     expect(sessionDirs(), isEmpty);
+  });
+
+  testWidgets('[IT] one sheet over the app: the app stays painted under it and a pull shows it', (WidgetTester t) async {
+    await t.pumpWidget(host((Future<DocScanResult?> _) {}));
+    await t.tap(find.text('scan'));
+    await settle(t, find.bySemanticsLabel('التقاط'));
+    // The screen the scan was opened from is still there under the sheet.
+    expect(find.text('scan'), findsOneWidget, reason: 'the route is not opaque');
+    final double rest = t.getTopLeft(find.text('مسح مستند')).dy;
+    final TestGesture g = await t.startGesture(t.getCenter(find.text('مسح مستند')));
+    await g.moveBy(const Offset(0, 20));
+    await g.moveBy(const Offset(0, 80));
+    await t.pump();
+    expect(t.getTopLeft(find.text('مسح مستند')).dy, greaterThan(rest + 60), reason: 'the sheet follows the finger');
+    await g.up();
+    await frames(t);
+    expect(t.getTopLeft(find.text('مسح مستند')).dy, closeTo(rest, 1), reason: 'a short pull springs back');
+    await t.tap(find.text('إلغاء'));
+    await closed(t);
   });
 
   testWidgets('[UT] a short pull springs back and keeps the scan', (WidgetTester t) async {
@@ -264,7 +293,7 @@ void main() {
     expect(find.text('تجاهل المسح؟'), findsNothing);
     // Close the empty scan for the next test.
     await t.tap(find.text('إلغاء'));
-    await settle(t, find.text('scan'));
+    await closed(t);
   });
 
   testWidgets('without text recognition review offers only the photo PDF, and nothing is read', (WidgetTester t) async {

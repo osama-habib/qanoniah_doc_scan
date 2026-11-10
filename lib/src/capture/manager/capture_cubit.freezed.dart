@@ -63,6 +63,11 @@ mixin _$CaptureState {
   /// so the phone does not heat up; «استئناف الكاميرا» wakes it (pk5).
   bool get idle => throw _privateConstructorUsedError;
 
+  /// The camera is off while the corner step covers it: the camera runs only
+  /// while it is on screen (owner, 2026-11-10). Turns false once it is back,
+  /// so the preview rebuilds on the reopened camera.
+  bool get cameraOff => throw _privateConstructorUsedError;
+
   /// Create a copy of CaptureState
   /// with the given fields replaced by the non-null parameter values.
   @JsonKey(includeFromJson: false, includeToJson: false)
@@ -99,6 +104,7 @@ abstract class $CaptureStateCopyWith<$Res> {
     ScanFlash flash,
     bool hasFlash,
     bool idle,
+    bool cameraOff,
   });
 
   $QuadCopyWith<$Res>? get quad;
@@ -142,6 +148,7 @@ class _$CaptureStateCopyWithImpl<$Res, $Val extends CaptureState>
     Object? flash = null,
     Object? hasFlash = null,
     Object? idle = null,
+    Object? cameraOff = null,
   }) {
     return _then(
       _value.copyWith(
@@ -229,6 +236,10 @@ class _$CaptureStateCopyWithImpl<$Res, $Val extends CaptureState>
                 ? _value.idle
                 : idle // ignore: cast_nullable_to_non_nullable
                       as bool,
+            cameraOff: null == cameraOff
+                ? _value.cameraOff
+                : cameraOff // ignore: cast_nullable_to_non_nullable
+                      as bool,
           )
           as $Val,
     );
@@ -308,6 +319,7 @@ abstract class _$$CaptureStateImplCopyWith<$Res>
     ScanFlash flash,
     bool hasFlash,
     bool idle,
+    bool cameraOff,
   });
 
   @override
@@ -353,6 +365,7 @@ class __$$CaptureStateImplCopyWithImpl<$Res>
     Object? flash = null,
     Object? hasFlash = null,
     Object? idle = null,
+    Object? cameraOff = null,
   }) {
     return _then(
       _$CaptureStateImpl(
@@ -440,6 +453,10 @@ class __$$CaptureStateImplCopyWithImpl<$Res>
             ? _value.idle
             : idle // ignore: cast_nullable_to_non_nullable
                   as bool,
+        cameraOff: null == cameraOff
+            ? _value.cameraOff
+            : cameraOff // ignore: cast_nullable_to_non_nullable
+                  as bool,
       ),
     );
   }
@@ -470,6 +487,7 @@ class _$CaptureStateImpl implements _CaptureState {
     this.flash = ScanFlash.auto,
     this.hasFlash = true,
     this.idle = false,
+    this.cameraOff = false,
   });
 
   @override
@@ -550,9 +568,16 @@ class _$CaptureStateImpl implements _CaptureState {
   @JsonKey()
   final bool idle;
 
+  /// The camera is off while the corner step covers it: the camera runs only
+  /// while it is on screen (owner, 2026-11-10). Turns false once it is back,
+  /// so the preview rebuilds on the reopened camera.
+  @override
+  @JsonKey()
+  final bool cameraOff;
+
   @override
   String toString() {
-    return 'CaptureState(phase: $phase, mode: $mode, quad: $quad, hint: $hint, pageCount: $pageCount, capturing: $capturing, shots: $shots, lastThumbnail: $lastThumbnail, limitReached: $limitReached, storageFull: $storageFull, replaced: $replaced, adjustFile: $adjustFile, adjustQuad: $adjustQuad, adjustTurns: $adjustTurns, straightenFile: $straightenFile, straightenQuad: $straightenQuad, straightenTurns: $straightenTurns, straightens: $straightens, flash: $flash, hasFlash: $hasFlash, idle: $idle)';
+    return 'CaptureState(phase: $phase, mode: $mode, quad: $quad, hint: $hint, pageCount: $pageCount, capturing: $capturing, shots: $shots, lastThumbnail: $lastThumbnail, limitReached: $limitReached, storageFull: $storageFull, replaced: $replaced, adjustFile: $adjustFile, adjustQuad: $adjustQuad, adjustTurns: $adjustTurns, straightenFile: $straightenFile, straightenQuad: $straightenQuad, straightenTurns: $straightenTurns, straightens: $straightens, flash: $flash, hasFlash: $hasFlash, idle: $idle, cameraOff: $cameraOff)';
   }
 
   @override
@@ -594,7 +619,9 @@ class _$CaptureStateImpl implements _CaptureState {
             (identical(other.flash, flash) || other.flash == flash) &&
             (identical(other.hasFlash, hasFlash) ||
                 other.hasFlash == hasFlash) &&
-            (identical(other.idle, idle) || other.idle == idle));
+            (identical(other.idle, idle) || other.idle == idle) &&
+            (identical(other.cameraOff, cameraOff) ||
+                other.cameraOff == cameraOff));
   }
 
   @override
@@ -621,6 +648,7 @@ class _$CaptureStateImpl implements _CaptureState {
     flash,
     hasFlash,
     idle,
+    cameraOff,
   ]);
 
   /// Create a copy of CaptureState
@@ -655,6 +683,7 @@ abstract class _CaptureState implements CaptureState {
     final ScanFlash flash,
     final bool hasFlash,
     final bool idle,
+    final bool cameraOff,
   }) = _$CaptureStateImpl;
 
   @override
@@ -723,6 +752,12 @@ abstract class _CaptureState implements CaptureState {
   /// so the phone does not heat up; «استئناف الكاميرا» wakes it (pk5).
   @override
   bool get idle;
+
+  /// The camera is off while the corner step covers it: the camera runs only
+  /// while it is on screen (owner, 2026-11-10). Turns false once it is back,
+  /// so the preview rebuilds on the reopened camera.
+  @override
+  bool get cameraOff;
 
   /// Create a copy of CaptureState
   /// with the given fields replaced by the non-null parameter values.

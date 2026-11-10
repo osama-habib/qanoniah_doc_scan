@@ -70,6 +70,11 @@ abstract class CaptureState with _$CaptureState {
     /// The camera paused itself after [CaptureCubit.idleAfter] without a capture,
     /// so the phone does not heat up; «استئناف الكاميرا» wakes it (pk5).
     @Default(false) bool idle,
+
+    /// The camera is off while the corner step covers it: the camera runs only
+    /// while it is on screen (owner, 2026-11-10). Turns false once it is back,
+    /// so the preview rebuilds on the reopened camera.
+    @Default(false) bool cameraOff,
   }) = _CaptureState;
 }
 
@@ -96,7 +101,7 @@ class CaptureCubit extends Cubit<CaptureState> {
     this.minLuminance = 60,
     this.rearmDistance = 0.1,
     this.rearmContentChange = 18,
-    this.idleAfter = const Duration(seconds: 10),
+    this.idleAfter,
     ScanFlash initialFlash = ScanFlash.auto,
     this.onFlashChanged,
   }) : _camera = camera,
@@ -137,7 +142,9 @@ class CaptureCubit extends Cubit<CaptureState> {
   final double rearmDistance;
 
   /// Without a capture or a tap for this long the camera pauses itself (pk5).
-  final Duration idleAfter;
+  /// Null, the default since 2026-11-10: the owner found the pause tiresome;
+  /// the camera is off on every step where it is not on screen instead.
+  final Duration? idleAfter;
 
   /// The flow keeps the flash between camera visits.
   final void Function(ScanFlash flash)? onFlashChanged;
@@ -147,8 +154,9 @@ class CaptureCubit extends Cubit<CaptureState> {
   /// Restarts the idle countdown: a capture or any action on the camera.
   void _stillHere() {
     _idle?.cancel();
-    if (isClosed || state.phase != CapturePhase.ready) return;
-    _idle = Timer(idleAfter, _sleep);
+    final Duration? after = idleAfter;
+    if (after == null || isClosed || state.phase != CapturePhase.ready) return;
+    _idle = Timer(after, _sleep);
   }
 
   Future<void> _sleep() async {
@@ -160,8 +168,10 @@ class CaptureCubit extends Cubit<CaptureState> {
   /// «استئناف الكاميرا» after the camera paused itself.
   Future<void> wake() async {
     if (!state.idle) return;
-    emit(state.copyWith(idle: false));
     await _camera.resume();
+    if (isClosed) return;
+    // After the camera is back, so the preview rebuilds on it.
+    emit(state.copyWith(idle: false));
     _resetSteady();
     _stillHere();
   }
@@ -222,9 +232,10 @@ class CaptureCubit extends Cubit<CaptureState> {
 
   Future<void> pauseCamera() => _camera.pause();
 
-  /// Back from the background; a camera that paused itself stays paused.
+  /// Back from the background; a camera that paused itself, or that the
+  /// corner step covers, stays paused.
   Future<void> resumeCamera() async {
-    if (state.idle) return;
+    if (state.idle || state.cameraOff) return;
     await _camera.resume();
     _stillHere();
   }
@@ -270,6 +281,7 @@ class CaptureCubit extends Cubit<CaptureState> {
         emit(
           state.copyWith(capturing: false, shots: state.shots + 1, adjustFile: raw, adjustQuad: found, adjustTurns: 0),
         );
+        _offScreen();
         final int upright = await turns;
         if (isClosed || _rotatedByHand || state.adjustFile?.path != raw.path) return;
         emit(state.copyWith(adjustTurns: upright));
@@ -284,6 +296,7 @@ class CaptureCubit extends Cubit<CaptureState> {
     _stillHere();
     final int turns = state.adjustTurns;
     emit(state.copyWith(capturing: true, adjustFile: null, adjustQuad: null, adjustTurns: 0));
+    _onScreen();
     _straighten(raw, corners, turns);
     await _store(raw, corners, turns);
   }
@@ -296,6 +309,26 @@ class CaptureCubit extends Cubit<CaptureState> {
       straightens: state.straightens + 1,
     ),
   );
+
+  /// Camera switches run one after another, so a quick retake cannot reopen
+  /// the camera while it is still closing.
+  Future<void> _cameraSwitch = Future<void>.value();
+
+  /// The corner step covers the camera: it closes until the step ends.
+  void _offScreen() {
+    _resetSteady();
+    emit(state.copyWith(cameraOff: true, quad: null));
+    _cameraSwitch = _cameraSwitch.then((_) => _camera.pause());
+  }
+
+  /// The camera is on screen again: it reopens, then the preview rebuilds.
+  void _onScreen() {
+    if (!state.cameraOff) return;
+    _cameraSwitch = _cameraSwitch.then((_) async {
+      await _camera.resume();
+      if (!isClosed) emit(state.copyWith(cameraOff: false));
+    });
+  }
 
   /// «تدوير» on the corner step: a quarter turn counter-clockwise.
   void rotateAdjusted() {
@@ -315,6 +348,7 @@ class CaptureCubit extends Cubit<CaptureState> {
     if (raw == null) return;
     _stillHere();
     emit(state.copyWith(adjustFile: null, adjustQuad: null, adjustTurns: 0));
+    _onScreen();
     try {
       await raw.delete();
     } on FileSystemException catch (_) {}

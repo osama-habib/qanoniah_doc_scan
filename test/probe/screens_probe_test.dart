@@ -169,13 +169,17 @@ void main() {
     final List<String> only = (env['PROBE_STEPS'] ?? 'camera,corners,filters,review,preview').split(',');
     await t.tap(find.text('scan'));
     await until(find.bySemanticsLabel('التقاط'));
-    if (only.contains('camera')) await shot('1_camera');
-    // 11 s without a capture: the camera pauses itself.
-    await t.pump(const Duration(seconds: 11));
-    await until(find.text('استئناف الكاميرا'));
-    if (only.contains('camera')) await shot('1b_paused');
-    await t.tap(find.text('استئناف الكاميرا'));
-    await until(find.bySemanticsLabel('التقاط'));
+    if (only.contains('camera')) {
+      await shot('1_camera');
+      // Mid-pull: the app shows behind the one sheet.
+      final TestGesture g = await t.startGesture(t.getCenter(find.text('مسح مستند')));
+      await g.moveBy(const Offset(0, 20));
+      await g.moveBy(const Offset(0, 90)); // under the 120 that closes the scan
+      await t.pump();
+      await shot('1a_pulling');
+      await g.up();
+      await wait(12);
+    }
     await t.tap(find.bySemanticsLabel('التقاط'));
     await until(find.text('حفظ الصفحة'));
     if (only.contains('corners')) {

@@ -38,7 +38,7 @@ void main() {
 
   CaptureCubit cubit({
     String? replacing,
-    Duration idleAfter = const Duration(seconds: 10),
+    Duration? idleAfter,
     ScanFlash initialFlash = ScanFlash.auto,
     void Function(ScanFlash)? onFlashChanged,
   }) => CaptureCubit(
@@ -321,6 +321,47 @@ void main() {
     await c.cycleFlash();
     expect((c.state.flash, camera.flash), (ScanFlash.auto, ScanFlash.auto));
     expect(told, <ScanFlash>[ScanFlash.on, ScanFlash.off, ScanFlash.auto]);
+    await c.close();
+  });
+
+  test('[UT] the camera never pauses itself on a timer (owner, 2026-11-10)', () async {
+    final CaptureCubit c = cubit();
+    await c.start();
+    await Future<void>.delayed(const Duration(milliseconds: 250));
+    expect(c.state.idle, isFalse);
+    expect(camera.paused, isFalse);
+    await c.close();
+  });
+
+  test('[UT] the corner step closes the camera; «إعادة الالتقاط» and «حفظ الصفحة» reopen it', () async {
+    final CaptureCubit c = cubit();
+    await c.start();
+    // Manual is the default: a capture stops on the corner step.
+    await c.capture();
+    await pumpEventQueue();
+    expect(c.state.adjustFile, isNotNull);
+    expect((c.state.cameraOff, camera.paused), (true, true), reason: 'off while the corner step covers it');
+
+    await c.retakeAdjusted();
+    await pumpEventQueue();
+    expect((c.state.cameraOff, camera.paused), (false, false), reason: 'back for the retake');
+
+    await c.capture();
+    await pumpEventQueue();
+    expect(camera.paused, isTrue);
+    await c.keepAdjusted(c.state.adjustQuad!);
+    await pumpEventQueue();
+    expect((c.state.cameraOff, camera.paused), (false, false), reason: 'back for the next page');
+    await c.close();
+  });
+
+  test('[UT] coming back from the background does not reopen a camera the corner step covers', () async {
+    final CaptureCubit c = cubit();
+    await c.start();
+    await c.capture();
+    await pumpEventQueue();
+    await c.resumeCamera();
+    expect(camera.paused, isTrue);
     await c.close();
   });
 
