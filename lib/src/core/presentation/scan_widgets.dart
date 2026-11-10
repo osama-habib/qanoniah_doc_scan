@@ -283,9 +283,9 @@ class ScanHeader extends StatelessWidget {
 enum _HeaderSlot { leading, title, trailing }
 
 /// Lays the sides at their natural width (up to a third each), then the title
-/// at its own width: in the middle of the screen when it fits between two equal
-/// margins (the wider side plus the gap), else in the middle of the space the
-/// sides leave, so a long file name shows more of itself instead of being cut.
+/// between two equal margins, the wider side plus the gap, so it is exactly in
+/// the middle of the screen on every scan screen (pk7 acceptance). A title too
+/// long for that space ends in an ellipsis.
 class _HeaderLayout extends MultiChildLayoutDelegate {
   _HeaderLayout(this.direction);
 
@@ -306,14 +306,10 @@ class _HeaderLayout extends MultiChildLayoutDelegate {
     if (hasChild(_HeaderSlot.trailing)) {
       positionChild(_HeaderSlot.trailing, Offset(rtl ? 0 : size.width - trail.width, (size.height - trail.height) / 2));
     }
-    const double gap = ScanMetrics.headerGap;
-    final double free = (size.width - leftWidth - rightWidth - 2 * gap).clamp(0, size.width);
-    final Size title = layoutChild(_HeaderSlot.title, BoxConstraints(maxWidth: free, maxHeight: size.height));
-    final double margin = (leftWidth > rightWidth ? leftWidth : rightWidth) + gap;
-    final double x = title.width <= size.width - 2 * margin
-        ? (size.width - title.width) / 2
-        : leftWidth + gap + (free - title.width) / 2;
-    positionChild(_HeaderSlot.title, Offset(x, (size.height - title.height) / 2));
+    final double margin = (leftWidth > rightWidth ? leftWidth : rightWidth) + ScanMetrics.headerGap;
+    final double room = (size.width - 2 * margin).clamp(0, size.width);
+    final Size title = layoutChild(_HeaderSlot.title, BoxConstraints(maxWidth: room, maxHeight: size.height));
+    positionChild(_HeaderSlot.title, Offset((size.width - title.width) / 2, (size.height - title.height) / 2));
   }
 
   @override
