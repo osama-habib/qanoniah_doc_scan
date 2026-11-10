@@ -172,6 +172,54 @@ enum PagePrep {
     return out.applyingFilter("CISharpenLuminance", parameters: [kCIInputSharpnessKey: 0.4])
   }
 
+  /// A prepared page re-encoded for the PDF (ClickUp z8y71x6uvk): shrunk to
+  /// `longEdge`, gray or black and white when asked, JPEG at `quality`. Core
+  /// Image does it on the GPU; the `image` package took seconds a page.
+  static func encode(_ args: [String: Any]) -> [String: Any]? {
+    guard let path = args["path"] as? String,
+      let longEdge = args["longEdge"] as? Int,
+      let quality = args["quality"] as? Int,
+      var page = CIImage(contentsOf: URL(fileURLWithPath: path))
+    else { return nil }
+    let long = max(page.extent.width, page.extent.height)
+    if long > CGFloat(longEdge) {
+      page = normalized(
+        page.applyingFilter(
+          "CILanczosScaleTransform",
+          parameters: [kCIInputScaleKey: CGFloat(longEdge) / long, kCIInputAspectRatioKey: 1]))
+    }
+    if (args["gray"] as? Bool) == true {
+      page = page.applyingFilter("CIColorControls", parameters: [kCIInputSaturationKey: 0])
+    }
+    if (args["bw"] as? Bool) == true {
+      // The Dart path's luminance threshold at 0.6, with a short ramp.
+      let s: CGFloat = 1 / 0.08
+      let lo: CGFloat = 0.56
+      page = page.applyingFilter(
+        "CIColorMatrix",
+        parameters: [
+          "inputRVector": CIVector(x: s, y: 0, z: 0, w: 0),
+          "inputGVector": CIVector(x: 0, y: s, z: 0, w: 0),
+          "inputBVector": CIVector(x: 0, y: 0, z: s, w: 0),
+          "inputBiasVector": CIVector(x: -lo * s, y: -lo * s, z: -lo * s, w: 0),
+        ]
+      ).applyingFilter("CIColorClamp")
+    }
+    page = normalized(page)
+    guard
+      let data = context.jpegRepresentation(
+        of: page, colorSpace: srgb,
+        options: [
+          CIImageRepresentationOption(rawValue: kCGImageDestinationLossyCompressionQuality as String):
+            CGFloat(quality) / 100
+        ])
+    else { return nil }
+    return [
+      "bytes": data,
+      "width": Int(page.extent.width), "height": Int(page.extent.height),
+    ]
+  }
+
   /// Black and white from the flattened page (shadows already gone). The cut is
   /// the page's own: between its ink and its paper (Otsu), then most of the way
   /// to the paper, so faint print and light stamps stay black while the paper's

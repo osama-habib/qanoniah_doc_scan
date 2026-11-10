@@ -19,12 +19,21 @@ class SizeFitter {
     required PdfLook look,
     required int maxBytes,
     required File Function() newFile,
+
+    /// Progress through the pages of the attempt under way, 0 to 1.
+    void Function(double progress)? onProgress,
   }) async {
     BuildOutput? last;
     for (final ImageEncoding enc in ImageEncoding.ladder) {
       final File out = newFile();
-      final Either<BuildFailure, BuildOutput> r =
-          await _builder.buildImage(pages: pages, colorMode: colorMode, encoding: enc, look: look, out: out);
+      final Either<BuildFailure, BuildOutput> r = await _builder.buildImage(
+        pages: pages,
+        colorMode: colorMode,
+        encoding: enc,
+        look: look,
+        out: out,
+        onPage: onProgress == null ? null : (int done, int total) => onProgress(done / total),
+      );
       if (r.isLeft()) return r;
       final BuildOutput o = r.getOrElse(() => throw StateError('unreachable'));
       if (o.sizeBytes <= maxBytes) {

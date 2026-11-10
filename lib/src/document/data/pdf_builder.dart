@@ -1,11 +1,9 @@
 import 'dart:io';
 import 'dart:isolate';
-import 'dart:math' as math;
 import 'dart:ui' show Rect;
 
 import 'package:dartz/dartz.dart';
 import 'package:flutter/foundation.dart';
-import 'package:image/image.dart' as img;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
@@ -16,8 +14,10 @@ import '../../core/session/scan_session.dart';
 import '../../core/session/word_placement.dart';
 import '../../recognition/data/post_processor.dart';
 import 'page_background.dart';
+import 'page_encoder.dart';
 import 'text_pdf_renderer.dart';
 
+export 'page_encoder.dart' show ImageEncoding;
 export 'text_pdf_renderer.dart' show PdfTextBlock;
 
 /// What [PdfBuilder] wrote (data-model BuildOutput).
@@ -31,23 +31,6 @@ class BuildOutput {
 
   /// Image form only: the photos were re-encoded smaller to fit the limit.
   final bool compressed;
-}
-
-/// Image encoding for one image-form attempt (research R7 size fitting).
-@immutable
-class ImageEncoding {
-  const ImageEncoding({required this.quality, required this.longEdge});
-
-  final int quality;
-  final int longEdge;
-
-  /// Tried in order until the PDF fits; the last one is the legibility floor.
-  static const List<ImageEncoding> ladder = <ImageEncoding>[
-    ImageEncoding(quality: 85, longEdge: 2200),
-    ImageEncoding(quality: 75, longEdge: 2200),
-    ImageEncoding(quality: 65, longEdge: 1900),
-    ImageEncoding(quality: 55, longEdge: 1600),
-  ];
 }
 
 /// Look of the text-form PDF, from the host's theme and fonts.
@@ -83,9 +66,14 @@ class PdfLook {
 ///   under the final text drawn in place. Redacted characters never reach the PDF,
 ///   and redacted words leave no pixels behind (FR-041, FR-042).
 class PdfBuilder {
-  const PdfBuilder({TextPdfRenderer textRenderer = const PdfPackageTextRenderer()}) : _textRenderer = textRenderer;
+  const PdfBuilder({
+    TextPdfRenderer textRenderer = const PdfPackageTextRenderer(),
+    PageEncoder encoder = const PageEncoder(),
+  }) : _textRenderer = textRenderer,
+       _encoder = encoder;
 
   final TextPdfRenderer _textRenderer;
+  final PageEncoder _encoder;
 
   static const double _pageWidth = 595; // A4 width in points.
 
@@ -95,18 +83,33 @@ class PdfBuilder {
     required ImageEncoding encoding,
     required PdfLook look,
     required File out,
+
+    /// After each page is encoded: pages done, of all.
+    void Function(int done, int total)? onPage,
   }) async {
     try {
+      // One page at a time, never all at once (ClickUp z8y71x6uvk).
+      final List<EncodedPage> encoded = <EncodedPage>[];
+      final List<int> sourceWidths = <int>[];
+      for (final CapturedPage p in pages) {
+        final EncodedPage e = await _encoder.encode(p.preparedFile.path, encoding, colorMode);
+        encoded.add(e);
+        // Word boxes are in the prepared page's pixels.
+        final (int, int)? prepared = jpegSize(await p.preparedFile.readAsBytes());
+        sourceWidths.add(prepared?.$1 ?? e.width);
+        onPage?.call(encoded.length, pages.length);
+      }
       final List<_ImagePage> inputs = <_ImagePage>[
-        for (final CapturedPage p in pages)
+        for (int i = 0; i < pages.length; i++)
           _ImagePage(
-            path: p.preparedFile.path,
-            words: switch (p.recognition) {
+            page: encoded[i],
+            sourceWidth: sourceWidths[i],
+            words: switch (pages[i].recognition) {
               RecognitionDone(:final PageText text) =>
                 text.paragraphs.expand((Paragraph para) => para.words).map((Word w) => (w.text, w.box)).toList(),
               _ => const <(String, Rect)>[],
             },
-            rtl: switch (p.recognition) {
+            rtl: switch (pages[i].recognition) {
               RecognitionDone(:final PageText text) => text.language == RecognitionLanguage.ar,
               _ => true,
             },
@@ -114,7 +117,8 @@ class PdfBuilder {
       ];
       final Uint8List font = look.font;
       final Uint8List fallback = look.fontFallback;
-      final Uint8List bytes = await Isolate.run(() => _imagePdf(inputs, colorMode, encoding, font, fallback));
+      // Only laying out: the JPEGs go in as they are.
+      final Uint8List bytes = await Isolate.run(() => _imagePdf(inputs, font, fallback));
       await out.writeAsBytes(bytes, flush: true);
       return Right<BuildFailure, BuildOutput>(
         BuildOutput(
@@ -214,20 +218,17 @@ class PdfBuilder {
 }
 
 class _ImagePage {
-  const _ImagePage({required this.path, required this.words, required this.rtl});
-  final String path;
+  const _ImagePage({required this.page, required this.sourceWidth, required this.words, required this.rtl});
+  final EncodedPage page;
+
+  /// The prepared page's width, which the word boxes are measured in.
+  final int sourceWidth;
   final List<(String, Rect)> words;
   final bool rtl;
 }
 
-/// Runs in an isolate: re-encodes each photo and lays out the image-form PDF.
-Future<Uint8List> _imagePdf(
-  List<_ImagePage> pages,
-  ScanColorMode mode,
-  ImageEncoding enc,
-  Uint8List font,
-  Uint8List fallback,
-) async {
+/// Runs in an isolate: lays out the image-form PDF around the encoded pages.
+Future<Uint8List> _imagePdf(List<_ImagePage> pages, Uint8List font, Uint8List fallback) async {
   final pw.Document doc = pw.Document(
     theme: pw.ThemeData.withFont(
       base: pw.Font.ttf(ByteData.sublistView(font)),
@@ -235,22 +236,13 @@ Future<Uint8List> _imagePdf(
     ),
   );
   for (final _ImagePage p in pages) {
-    final img.Image? decoded = img.decodeImage(await File(p.path).readAsBytes());
-    if (decoded == null) throw const FileSystemException('decode');
-    img.Image photo = decoded;
-    final int long = math.max(photo.width, photo.height);
-    if (long > enc.longEdge) {
-      photo = photo.width >= photo.height
-          ? img.copyResize(photo, width: enc.longEdge, interpolation: img.Interpolation.average)
-          : img.copyResize(photo, height: enc.longEdge, interpolation: img.Interpolation.average);
-    }
-    if (mode != ScanColorMode.color) photo = img.grayscale(photo);
-    if (mode == ScanColorMode.bw) photo = img.luminanceThreshold(photo, threshold: 0.6);
-    final Uint8List jpg = img.encodeJpg(photo, quality: enc.quality);
-
-    // Word boxes are in the prepared image's pixels.
-    final double scale = PdfBuilder._pageWidth / decoded.width;
-    final PdfPageFormat format = PdfPageFormat(PdfBuilder._pageWidth, decoded.height * scale);
+    final Uint8List jpg = p.page.bytes;
+    // Word boxes are in the prepared page's pixels; the page keeps its shape.
+    final double scale = PdfBuilder._pageWidth / p.sourceWidth;
+    final PdfPageFormat format = PdfPageFormat(
+      PdfBuilder._pageWidth,
+      p.page.height * PdfBuilder._pageWidth / p.page.width,
+    );
     doc.addPage(
       pw.Page(
         pageFormat: format,

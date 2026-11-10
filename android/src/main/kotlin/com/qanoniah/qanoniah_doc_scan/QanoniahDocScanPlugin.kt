@@ -63,6 +63,16 @@ class QanoniahDocScanPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                         if (out != null) result.success(out) else result.error("prepare_failed", null, null)
                     }
                 }
+                "encodePage" -> prepWorker.execute {
+                    val out = try {
+                        PagePrep.encode(args)
+                    } catch (e: Throwable) {
+                        null
+                    }
+                    main.post {
+                        if (out != null) result.success(out) else result.error("encode_failed", null, null)
+                    }
+                }
                 else -> result.notImplemented()
             }
         }

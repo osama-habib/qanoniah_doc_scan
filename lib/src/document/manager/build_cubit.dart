@@ -88,6 +88,10 @@ class BuildCubit extends Cubit<BuildState> {
       look: _look,
       maxBytes: _maxFileBytes,
       newFile: () => _sessions.newFile('pdf'),
+      // The bar moves page by page (ClickUp z8y71x6uvk).
+      onProgress: (double p) {
+        if (!isClosed) emit(state.copyWith(progress: p));
+      },
     );
     if (isClosed) return;
     r.fold(

@@ -70,6 +70,34 @@ object PagePrep {
     }
 
     /** Decodes with EXIF orientation applied, no larger than [maxLong] on the long side. */
+    /**
+     * A prepared page re-encoded for the PDF (ClickUp z8y71x6uvk): shrunk to
+     * `longEdge`, gray or black and white when asked, JPEG at `quality`, in
+     * native code; the `image` package took seconds a page.
+     */
+    fun encode(args: Map<*, *>): Map<String, Any>? {
+        val path = args["path"] as? String ?: return null
+        val longEdge = (args["longEdge"] as? Number)?.toInt() ?: return null
+        val quality = (args["quality"] as? Number)?.toInt() ?: return null
+        var page = decodeUpright(path, longEdge) ?: return null
+        val long = max(page.width, page.height)
+        if (long > longEdge) {
+            val k = longEdge.toFloat() / long
+            val scaled = Bitmap.createScaledBitmap(
+                page, max(1, (page.width * k).roundToInt()), max(1, (page.height * k).roundToInt()), true)
+            page.recycle()
+            page = scaled
+        }
+        if (args["gray"] == true) page = colorMatrix(page, ColorMatrix().apply { setSaturation(0f) })
+        // The Dart path's luminance threshold at 0.6.
+        if (args["bw"] == true) page = threshold(page, 0.6f)
+        val out = java.io.ByteArrayOutputStream()
+        page.compress(Bitmap.CompressFormat.JPEG, quality, out)
+        val result = mapOf<String, Any>("bytes" to out.toByteArray(), "width" to page.width, "height" to page.height)
+        page.recycle()
+        return result
+    }
+
     private fun decodeUpright(path: String, maxLong: Int): Bitmap? {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeFile(path, bounds)
@@ -310,8 +338,7 @@ object PagePrep {
         return cut.coerceIn(0.6, 0.9)
     }
 
-    // TODO(unused): the fixed 0.78 cut before the page's own (2026-11-10).
-    @Suppress("unused")
+    /** Hard cut at [level]: the PDF's black-and-white mode, and the fixed 0.78 cut before the page's own. */
     private fun threshold(src: Bitmap, level: Float): Bitmap {
         val w = src.width
         val h = src.height

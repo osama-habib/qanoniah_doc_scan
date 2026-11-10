@@ -69,6 +69,18 @@ public class QanoniahDocScanPlugin: NSObject, FlutterPlugin {
           }
         }
       }
+    case "encodePage":
+      prepQueue.async {
+        var out = autoreleasepool { PagePrep.encode(args) }
+        if let data = out?["bytes"] as? Data { out?["bytes"] = FlutterStandardTypedData(bytes: data) }
+        DispatchQueue.main.async {
+          if let out = out {
+            result(out)
+          } else {
+            result(FlutterError(code: "encode_failed", message: nil, details: nil))
+          }
+        }
+      }
     case "uprightTurns":
       guard let path = args["path"] as? String, let quad = args["quad"] as? [Double] else {
         return result(FlutterMethodNotImplemented)
