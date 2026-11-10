@@ -131,21 +131,26 @@ class _FiltersScreenState extends State<FiltersScreen> {
             bottom: false,
             child: Column(
               children: <Widget>[
-                // Design `scan-filter` header: back, the title and page count,
-                // «التالي»; 12 between them.
+                // Design 04-a header: back and «التالي» each in a 96 slot, so the
+                // title and the page count are exactly in the middle.
                 Padding(
                   padding: ScanMetrics.filtersHeader,
                   child: Row(
                     children: <Widget>[
-                      ScanIconButton(
-                        icon: t.icons.back,
-                        label: s.addPage,
-                        mirrorInRtl: true,
-                        color: t.onCameraSurface,
-                        background: t.onCameraSurface.withValues(alpha: 0.12),
-                        onPressed: widget.onBack,
+                      SizedBox(
+                        width: ScanMetrics.filtersSide,
+                        child: Align(
+                          alignment: AlignmentDirectional.centerStart,
+                          child: ScanIconButton(
+                            icon: t.icons.back,
+                            label: s.addPage,
+                            mirrorInRtl: true,
+                            color: t.onCameraSurface,
+                            background: t.onCameraSurface.withValues(alpha: 0.12),
+                            onPressed: widget.onBack,
+                          ),
+                        ),
                       ),
-                      SizedBox(width: t.spaceMd),
                       Expanded(
                         child: Column(
                           children: <Widget>[
@@ -165,8 +170,13 @@ class _FiltersScreenState extends State<FiltersScreen> {
                           ],
                         ),
                       ),
-                      SizedBox(width: t.spaceMd),
-                      _Pill(label: s.next, onTap: st.working ? null : widget.onNext),
+                      SizedBox(
+                        width: ScanMetrics.filtersSide,
+                        child: Align(
+                          alignment: AlignmentDirectional.centerEnd,
+                          child: _Pill(label: s.next, onTap: st.working ? null : widget.onNext),
+                        ),
+                      ),
                     ],
                   ),
                 ),

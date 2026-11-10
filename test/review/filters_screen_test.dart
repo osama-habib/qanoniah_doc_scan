@@ -106,4 +106,15 @@ void main() {
     await t.pumpWidget(const SizedBox());
     await t.runAsync(cubit.close);
   });
+
+  testWidgets('[UT] the title and page count are exactly in the middle, back and «التالي» in 96 slots (04-a)', (
+    WidgetTester t,
+  ) async {
+    final ReviewCubit cubit = await pump(t);
+    expect(t.getCenter(find.text('توضيح الصفحات')).dx, closeTo(201, 0.5));
+    expect(t.getCenter(find.text('صفحة 1 / 3')).dx, closeTo(201, 0.5));
+    // Unmount before closing: a cubit still watched closes only as frames pump.
+    await t.pumpWidget(const SizedBox());
+    await t.runAsync(cubit.close);
+  });
 }

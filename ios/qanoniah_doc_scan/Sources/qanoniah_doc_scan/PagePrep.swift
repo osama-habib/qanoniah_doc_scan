@@ -172,12 +172,72 @@ enum PagePrep {
     return out.applyingFilter("CISharpenLuminance", parameters: [kCIInputSharpnessKey: 0.4])
   }
 
+  /// Black and white from the flattened page (shadows already gone). The cut is
+  /// the page's own: between its ink and its paper (Otsu), then most of the way
+  /// to the paper, so faint print and light stamps stay black while the paper's
+  /// grain goes white. A narrow ramp keeps letters' edges smooth, not jagged.
   private static func blackWhite(_ flat: CIImage) -> CIImage {
-    let g = flat.applyingFilter("CIColorControls", parameters: [kCIInputSaturationKey: 0, kCIInputContrastKey: 1.2])
-    if CIFilter(name: "CIColorThreshold") != nil {
-      return g.applyingFilter("CIColorThreshold", parameters: ["inputThreshold": 0.78])
+    let g = flat.applyingFilter("CIColorControls", parameters: [kCIInputSaturationKey: 0])
+    let cut = CGFloat(inkCut(g) ?? 0.78)
+    let ramp: CGFloat = 0.04
+    let lo = cut - ramp
+    let s = 1 / (2 * ramp)
+    return g.applyingFilter(
+      "CIColorMatrix",
+      parameters: [
+        "inputRVector": CIVector(x: s, y: 0, z: 0, w: 0),
+        "inputGVector": CIVector(x: 0, y: s, z: 0, w: 0),
+        "inputBVector": CIVector(x: 0, y: 0, z: s, w: 0),
+        "inputBiasVector": CIVector(x: -lo * s, y: -lo * s, z: -lo * s, w: 0),
+      ]
+    ).applyingFilter("CIColorClamp")
+  }
+
+  /// The gray level (0 to 1) that parts ink from paper on [gray], or nil.
+  static func inkCut(_ gray: CIImage) -> Double? {
+    let bins = 256
+    let e = gray.extent
+    // A histogram needs no detail.
+    let k = min(1, 512 / max(e.width, e.height))
+    let small = gray.applyingFilter("CILanczosScaleTransform", parameters: [kCIInputScaleKey: k, kCIInputAspectRatioKey: 1])
+    guard
+      let hist = CIFilter(
+        name: "CIAreaHistogram",
+        parameters: [
+          kCIInputImageKey: small, kCIInputExtentKey: CIVector(cgRect: small.extent),
+          "inputCount": bins, "inputScale": 1,
+        ])?.outputImage
+    else { return nil }
+    var data = [Float](repeating: 0, count: bins * 4)
+    context.render(
+      hist, toBitmap: &data, rowBytes: bins * 4 * MemoryLayout<Float>.size,
+      bounds: CGRect(x: 0, y: 0, width: bins, height: 1), format: .RGBAf, colorSpace: nil)
+    return inkCut(histogram: (0..<bins).map { Double(data[$0 * 4]) })
+  }
+
+  /// Otsu's level, then 55% of the way up to the paper's peak; kept between
+  /// 0.6 and 0.9.
+  static func inkCut(histogram h: [Double]) -> Double? {
+    let n = h.count
+    let total = h.reduce(0, +)
+    guard total > 0, n > 1 else { return nil }
+    var sumAll = 0.0
+    for i in 0..<n { sumAll += Double(i) * h[i] }
+    var sumB = 0.0, wB = 0.0, best = -1.0, t = n / 2
+    for i in 0..<n {
+      wB += h[i]
+      if wB == 0 { continue }
+      let wF = total - wB
+      if wF == 0 { break }
+      sumB += Double(i) * h[i]
+      let mB = sumB / wB, mF = (sumAll - sumB) / wF
+      let between = wB * wF * (mB - mF) * (mB - mF)
+      if between > best { best = between; t = i }
     }
-    return g.applyingFilter("CIColorControls", parameters: [kCIInputContrastKey: 4])
+    var paper = t
+    for i in t..<n where h[i] > h[paper] { paper = i }
+    let cut = (Double(t) + 0.55 * Double(paper - t)) / Double(n - 1)
+    return min(0.9, max(0.6, cut))
   }
 
   // MARK: Live frames

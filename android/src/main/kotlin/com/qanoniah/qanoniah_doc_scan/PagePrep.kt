@@ -56,7 +56,7 @@ object PagePrep {
         if ("highContrast" in filters) visible = colorMatrix(visible, contrast(1.35f))
         if ("sharpenText" in filters) visible = sharpen(visible)
         if ("grayscale" in filters) visible = colorMatrix(visible, ColorMatrix().apply { setSaturation(0f) })
-        if ("blackWhite" in filters) visible = threshold(flat, 0.78f)
+        if ("blackWhite" in filters) visible = blackWhite(flat)
 
         write(visible, prepared, quality)
         val ocrBase = if ("removeShadows" in filters || "blackWhite" in filters) visible else flat
@@ -256,6 +256,62 @@ object PagePrep {
         return Bitmap.createBitmap(out, w, h, Bitmap.Config.ARGB_8888)
     }
 
+    /**
+     * Black and white from the flattened page (shadows already gone). The cut is
+     * the page's own: between its ink and its paper (Otsu), then most of the way
+     * to the paper, so faint print and light stamps stay black while the paper's
+     * grain goes white. A narrow ramp keeps letters' edges smooth, not jagged.
+     */
+    private fun blackWhite(src: Bitmap): Bitmap {
+        val w = src.width
+        val h = src.height
+        val px = IntArray(w * h)
+        src.getPixels(px, 0, w, 0, 0, w, h)
+        val hist = DoubleArray(256)
+        for (c in px) hist[lum(c).toInt().coerceIn(0, 255)] += 1.0
+        val cut = (inkCut(hist) ?: 0.78) * 255.0
+        val ramp = 0.04 * 255.0
+        val lo = cut - ramp
+        for (i in px.indices) {
+            val v = ((lum(px[i]) - lo) / (2 * ramp) * 255.0).toInt().coerceIn(0, 255)
+            px[i] = (0xFF shl 24) or (v shl 16) or (v shl 8) or v
+        }
+        return Bitmap.createBitmap(px, w, h, Bitmap.Config.ARGB_8888)
+    }
+
+    /** Otsu's level, then 55% of the way up to the paper's peak; between 0.6 and 0.9. */
+    fun inkCut(h: DoubleArray): Double? {
+        val n = h.size
+        val total = h.sum()
+        if (total <= 0 || n < 2) return null
+        var sumAll = 0.0
+        for (i in 0 until n) sumAll += i * h[i]
+        var sumB = 0.0
+        var wB = 0.0
+        var best = -1.0
+        var t = n / 2
+        for (i in 0 until n) {
+            wB += h[i]
+            if (wB == 0.0) continue
+            val wF = total - wB
+            if (wF == 0.0) break
+            sumB += i * h[i]
+            val mB = sumB / wB
+            val mF = (sumAll - sumB) / wF
+            val between = wB * wF * (mB - mF) * (mB - mF)
+            if (between > best) {
+                best = between
+                t = i
+            }
+        }
+        var paper = t
+        for (i in t until n) if (h[i] > h[paper]) paper = i
+        val cut = (t + 0.55 * (paper - t)) / (n - 1).toDouble()
+        return cut.coerceIn(0.6, 0.9)
+    }
+
+    // TODO(unused): the fixed 0.78 cut before the page's own (2026-11-10).
+    @Suppress("unused")
     private fun threshold(src: Bitmap, level: Float): Bitmap {
         val w = src.width
         val h = src.height

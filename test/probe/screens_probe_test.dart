@@ -80,7 +80,10 @@ void main() {
     final Directory tmp = Directory.systemTemp.createTempSync('screens');
     await t.runAsync(() async {
       for (final (String fam, List<String> files) in <(String, List<String>)>[
-        ('NotoSansArabic', <String>['NotoSansArabic-Regular.ttf', 'NotoSansArabic-Medium.ttf', 'NotoSansArabic-SemiBold.ttf']),
+        (
+          'NotoSansArabic',
+          <String>['NotoSansArabic-Regular.ttf', 'NotoSansArabic-Medium.ttf', 'NotoSansArabic-SemiBold.ttf'],
+        ),
         ('NotoSans', <String>['NotoSans-Regular.ttf']),
       ]) {
         final FontLoader l = FontLoader(fam);

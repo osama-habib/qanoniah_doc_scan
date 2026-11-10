@@ -344,6 +344,38 @@ void main() {
     await t.runAsync(() => result);
   });
 
+  testWidgets('[IT] dragging a corner down on the corner step moves the corner, never the sheet (uv0)', (
+    WidgetTester t,
+  ) async {
+    await t.pumpWidget(host((Future<DocScanResult?> _) {}));
+    await t.tap(find.text('scan'));
+    await settle(t, find.bySemanticsLabel('التقاط'));
+    await t.tap(find.bySemanticsLabel('التقاط'));
+    await settle(t, find.text('حفظ الصفحة'));
+    // The photo loads before its handles show.
+    await settle(t, find.byType(AnimatedScale));
+    await frames(t);
+    // The top-left corner's dot, at the photo's top, where the sheet's pull
+    // zone is: the sheet used to take a downward drag from there.
+    final Finder dot = find.byType(AnimatedScale).first;
+    final Offset was = t.getCenter(dot);
+    final double title = t.getTopLeft(find.text('مسح مستند')).dy;
+    final TestGesture g = await t.startGesture(was);
+    for (int i = 0; i < 8; i++) {
+      await g.moveBy(const Offset(0, 20));
+      await t.pump();
+    }
+    expect(t.getCenter(dot).dy, greaterThan(was.dy + 100), reason: 'the corner followed the finger down');
+    expect(t.getTopLeft(find.text('مسح مستند')).dy, title, reason: 'the sheet stayed');
+    await g.up();
+    await frames(t);
+    expect(find.text('تجاهل المسح؟'), findsNothing);
+    expect(find.text('حفظ الصفحة'), findsOneWidget, reason: 'still on the corner step');
+    // No page kept yet: «إلغاء» closes at once.
+    await t.tap(find.text('إلغاء'));
+    await closed(t);
+  });
+
   testWidgets('[UT] a short pull springs back and keeps the scan', (WidgetTester t) async {
     await t.pumpWidget(host((Future<DocScanResult?> _) {}));
     await t.tap(find.text('scan'));

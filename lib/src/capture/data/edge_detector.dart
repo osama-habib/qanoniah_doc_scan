@@ -8,6 +8,7 @@ import 'package:image/image.dart' as img;
 
 import '../../core/session/scan_session.dart';
 import 'camera_source.dart';
+import 'page_finder.dart';
 
 /// What one frame shows: the page corners, if any, and whether the frame is good
 /// enough to capture (FR-003).
@@ -130,13 +131,29 @@ class DartEdgeDetector implements EdgeDetector {
   Future<void> dispose() async {}
 }
 
-/// Decodes [path] upright, scales it to a 640 px long edge, and finds the page.
+/// Decodes [path] upright and finds the page: its four sides on a 1600 px copy
+/// ([findPage]), else the brightest region on 640 px.
 Quad? detectInPhotoFile(String path, double minAreaRatio) {
   final img.Image? decoded = img.decodeImage(File(path).readAsBytesSync());
   if (decoded == null) return null;
   img.Image photo = img.bakeOrientation(decoded);
   final int long = math.max(photo.width, photo.height);
-  if (long > 640) {
+  if (long > 1600) {
+    photo = photo.width >= photo.height
+        ? img.copyResize(photo, width: 1600, interpolation: img.Interpolation.average)
+        : img.copyResize(photo, height: 1600, interpolation: img.Interpolation.average);
+  }
+  // The darkest of red, green and blue: white paper stays bright while a cream
+  // or wooden table, and a tinted band printed on the page's edge, lose their
+  // blue; luminance alone hardly tells them apart.
+  final Uint8List full = Uint8List(photo.width * photo.height);
+  int j = 0;
+  for (final img.Pixel p in photo) {
+    full[j++] = math.min(p.r, math.min(p.g, p.b)).round().clamp(0, 255);
+  }
+  final Quad? sides = findPage(full, photo.width, photo.height, minAreaRatio: minAreaRatio, work: 360);
+  if (sides != null) return sides;
+  if (math.max(photo.width, photo.height) > 640) {
     photo = photo.width >= photo.height
         ? img.copyResize(photo, width: 640, interpolation: img.Interpolation.average)
         : img.copyResize(photo, height: 640, interpolation: img.Interpolation.average);
@@ -227,13 +244,16 @@ class VisionEdgeDetector implements EdgeDetector {
   Future<int> uprightTurns(File photo, Quad corners) async {
     if (_useFallback) return 0;
     try {
-      final Map<Object?, Object?>? res = await _channel.invokeMapMethod<Object?, Object?>('uprightTurns', <String, Object>{
-        'path': photo.path,
-        'quad': <double>[
-          corners.topLeft.dx, corners.topLeft.dy, corners.topRight.dx, corners.topRight.dy, //
-          corners.bottomRight.dx, corners.bottomRight.dy, corners.bottomLeft.dx, corners.bottomLeft.dy,
-        ],
-      });
+      final Map<Object?, Object?>? res = await _channel.invokeMapMethod<Object?, Object?>(
+        'uprightTurns',
+        <String, Object>{
+          'path': photo.path,
+          'quad': <double>[
+            corners.topLeft.dx, corners.topLeft.dy, corners.topRight.dx, corners.topRight.dy, //
+            corners.bottomRight.dx, corners.bottomRight.dy, corners.bottomLeft.dx, corners.bottomLeft.dy,
+          ],
+        },
+      );
       lastUprightDetails = res;
       return ((res?['turns'] as num?)?.toInt() ?? 0) % 4;
     } on MissingPluginException {
@@ -272,6 +292,17 @@ class VisionEdgeDetector implements EdgeDetector {
 /// The detection itself; synchronous so tests and the isolate share it.
 FrameAnalysis analyzeLuminance(Uint8List bytes, int width, int height, double minAreaRatio) {
   final (double sharpness, double luminance) = frameStats(bytes, width, height);
+  // The page's four sides first, like the still; the brightest region below
+  // when no four sides are found.
+  final Quad? sides = findPage(bytes, width, height, minAreaRatio: minAreaRatio, work: 320);
+  if (sides != null) {
+    return FrameAnalysis(
+      quad: sides,
+      sharpness: sharpness,
+      luminance: luminance,
+      signature: frameSignature(bytes, width, height),
+    );
+  }
 
   // A small copy: the page outline needs no detail.
   final int step = math.max(1, (math.max(width, height) / 160).ceil());
