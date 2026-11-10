@@ -213,81 +213,76 @@ class _Header extends StatelessWidget {
   Widget build(BuildContext context) {
     final DocScanTheme t = DocScanTheme.of(context);
     final TextStyle name = t.bodyStyle.sized(14, 20).copyWith(color: t.onSurface, fontWeight: FontWeight.w700);
-    return Container(
-      padding: ScanMetrics.header,
-      decoration: BoxDecoration(
-        border: Border(bottom: BorderSide(color: t.surfaceTertiary)),
+    // Design `scanPreview` (pk7): the shared header, so the file name sits in
+    // the middle of the screen however wide the page count is.
+    return ScanHeader(
+      title: strings.previewTitle,
+      divider: true,
+      leading: ScanIconButton(
+        icon: t.icons.back,
+        label: strings.back,
+        mirrorInRtl: true,
+        color: t.onSurface,
+        background: t.surfaceTertiary,
+        onPressed: onBack,
       ),
-      child: Row(
+      titleWidget: Row(
+        mainAxisSize: MainAxisSize.min,
         children: <Widget>[
-          ScanIconButton(
-            icon: t.icons.back,
-            label: strings.back,
-            mirrorInRtl: true,
-            color: t.onSurface,
-            background: t.surfaceTertiary,
-            onPressed: onBack,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Semantics(
-              header: true,
-              label: strings.previewTitle,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: <Widget>[
-                  SvgPicture.asset(t.icons.pdf, width: 18, height: 22),
-                  const SizedBox(width: 8),
-                  if (renaming)
-                    Flexible(
-                      child: _RenameField(
-                        initial: state.fileStem,
-                        style: name.sized(16, 20),
-                        strings: strings,
-                        onDone: () => onRename(false),
-                      ),
-                    )
-                  else
-                    Flexible(
-                      child: Semantics(
-                        button: true,
-                        label: strings.rename,
-                        child: GestureDetector(
-                          onTap: () => onRename(true),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: <Widget>[
-                              Flexible(
-                                child: Text(
-                                  '\u2068${state.fileStem}\u2069.pdf',
-                                  style: name,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                              const SizedBox(width: 6),
-                              DocScanIcon(t.icons.edit, size: 14, color: t.onSurfaceMuted),
-                            ],
-                          ),
+          SvgPicture.asset(t.icons.pdf, width: 18, height: 22),
+          const SizedBox(width: 8),
+          if (renaming)
+            Flexible(
+              child: _RenameField(
+                initial: state.fileStem,
+                style: name.sized(16, 20),
+                strings: strings,
+                onDone: () => onRename(false),
+              ),
+            )
+          else
+            Flexible(
+              child: Semantics(
+                button: true,
+                label: strings.rename,
+                child: GestureDetector(
+                  onTap: () => onRename(true),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      Flexible(
+                        child: Text(
+                          '\u2068${state.fileStem}\u2069.pdf',
+                          style: name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                    ),
-                ],
+                      const SizedBox(width: 6),
+                      DocScanIcon(t.icons.edit, size: 14, color: t.onSurfaceMuted),
+                    ],
+                  ),
+                ),
               ),
             ),
-          ),
-          const SizedBox(width: 8),
+        ],
+      ),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
           Text(
             strings.pageCount(state.pages.length),
             style: t.captionStyle
                 .sized(12, 16)
                 .copyWith(color: t.onSurfaceMuted, fontFeatures: const <FontFeature>[FontFeature.tabularFigures()]),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: ScanMetrics.headerGroupGap),
           ScanIconButton(
             icon: t.icons.pages,
             label: strings.allPages,
             color: t.onSurface,
+            // TODO(ahmed): design's active fill is #eef3fd, no kit token; brand
+            // navy at 7% over white is the nearest.
             background: sidebar ? t.primary.withValues(alpha: 0.07) : t.surfaceTertiary,
             onPressed: onSidebar,
           ),

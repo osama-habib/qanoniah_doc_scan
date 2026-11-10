@@ -11,6 +11,18 @@ abstract final class ScanMetrics {
   /// 12 below.
   static const EdgeInsets header = EdgeInsets.fromLTRB(16, 22, 16, 12);
 
+  /// A header with actions (pk7): the row is [headerRow] high so the flash's
+  /// 44 touch target fits (z8y71x6uuw), the design's 36 buttons centred in it,
+  /// and the padding gives the extra 4 back above and below, so what shows is
+  /// still 22 / 12 and every scan header is the same height.
+  static const double headerRow = 44;
+  static const EdgeInsets headerWithActions = EdgeInsets.fromLTRB(16, 18, 16, 8);
+
+  /// Between the header's sides and its title (12), and between the buttons of
+  /// one side (8).
+  static const double headerGap = 12;
+  static const double headerGroupGap = 8;
+
   /// «توضيح الصفحات»'s header: 10 below.
   static const EdgeInsets filtersHeader = EdgeInsets.fromLTRB(16, 22, 16, 10);
   static const EdgeInsets cameraBar = EdgeInsets.fromLTRB(24, 12, 24, 16);

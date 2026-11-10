@@ -11,6 +11,7 @@ import 'package:qanoniah_doc_scan/src/capture/data/camera_source.dart';
 import 'package:qanoniah_doc_scan/src/capture/data/edge_detector.dart';
 import 'package:qanoniah_doc_scan/src/core/doc_scan.dart';
 import 'package:qanoniah_doc_scan/src/core/failures.dart';
+import 'package:qanoniah_doc_scan/src/core/presentation/scan_widgets.dart';
 import 'package:qanoniah_doc_scan/src/core/session/scan_session.dart';
 import 'package:qanoniah_doc_scan/src/core/session/scan_session_repo.dart';
 import 'package:qanoniah_doc_scan/src/recognition/data/text_recognizer.dart';
@@ -264,7 +265,9 @@ void main() {
     expect(sessionDirs(), isEmpty);
   });
 
-  testWidgets('[IT] one sheet over the app: the app stays painted under it and a pull shows it', (WidgetTester t) async {
+  testWidgets('[IT] one sheet over the app: the app stays painted under it and a pull shows it', (
+    WidgetTester t,
+  ) async {
     await t.pumpWidget(host((Future<DocScanResult?> _) {}));
     await t.tap(find.text('scan'));
     await settle(t, find.bySemanticsLabel('التقاط'));
@@ -281,6 +284,64 @@ void main() {
     expect(t.getTopLeft(find.text('مسح مستند')).dy, closeTo(rest, 1), reason: 'a short pull springs back');
     await t.tap(find.text('إلغاء'));
     await closed(t);
+  });
+
+  testWidgets('[IT] every scan header has the design\'s size and a title in the middle of the screen (pk7)', (
+    WidgetTester t,
+  ) async {
+    late Future<DocScanResult?> result;
+    await t.pumpWidget(host((Future<DocScanResult?> f) => result = f, recognizeText: false));
+    final double middle = t.getSize(find.byType(MaterialApp)).width / 2;
+    final List<double> heights = <double>[];
+
+    void checkHeader(String screen, {required Finder title, Finder? button, bool line = false}) {
+      // The header holding this title (a step change cross-fades two).
+      final Rect header = t.getRect(find.ancestor(of: title, matching: find.byType(ScanHeader)).first);
+      // The 1px line under review and preview sits below the 12.
+      final double content = header.height - (line ? 1 : 0);
+      heights.add(content);
+      // 22 above + a 36 row + 12 below; the flash's 44 row gives its 8 back.
+      expect(content, 70, reason: '$screen: header height');
+      expect(t.getCenter(title).dx, closeTo(middle, 0.5), reason: '$screen: title in the middle');
+      if (button != null) {
+        final Rect b = t.getRect(button);
+        expect(b.size, const Size(36, 36), reason: '$screen: round button 36 x 36');
+        expect(b.top - header.top, 22, reason: '$screen: 22 above the button');
+        expect(header.bottom - (line ? 1 : 0) - b.bottom, 12, reason: '$screen: 12 below the button');
+      }
+    }
+
+    await t.tap(find.text('scan'));
+    await settle(t, find.bySemanticsLabel('التقاط'));
+    checkHeader('camera', title: find.text('مسح مستند'));
+
+    await capturePage(t);
+    await t.tap(find.text('حفظ (1)'));
+    await settle(t, find.text('التالي'));
+    await t.tap(find.text('التالي'));
+    await settle(t, find.bySemanticsLabel('معاينة'));
+    await frames(t);
+    checkHeader('review', title: find.text('مراجعة الصفحات'), button: find.bySemanticsLabel('رجوع'), line: true);
+
+    await t.tap(find.bySemanticsLabel('معاينة'));
+    await settle(t, find.bySemanticsLabel('معاينة ملف PDF'), tries: 200);
+    await t.pump(const Duration(milliseconds: 300));
+    // The file name with its icon.
+    await frames(t);
+    final Finder slot = find.descendant(
+      of: find.ancestor(of: find.bySemanticsLabel('كل الصفحات'), matching: find.byType(ScanHeader)),
+      matching: find.byWidgetPredicate((Widget w) => w is Semantics && (w.properties.header ?? false)),
+    );
+    checkHeader('preview', title: slot, button: find.bySemanticsLabel('كل الصفحات'), line: true);
+    expect(heights.toSet().length, 1, reason: 'the same height on every screen');
+
+    await t.tap(find.text('إرفاق كملف PDF').last);
+    for (int i = 0; i < 100; i++) {
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      await t.pump();
+      if (find.byType(DocScanFlow).evaluate().isEmpty) break;
+    }
+    await t.runAsync(() => result);
   });
 
   testWidgets('[UT] a short pull springs back and keeps the scan', (WidgetTester t) async {
@@ -322,7 +383,9 @@ void main() {
     expect(r!.pageTexts.single, isEmpty);
   });
 
-  testWidgets('[IT] review offers «معاينة», not «إرفاق»: attaching comes only after the preview (pk6)', (WidgetTester t) async {
+  testWidgets('[IT] review offers «معاينة», not «إرفاق»: attaching comes only after the preview (pk6)', (
+    WidgetTester t,
+  ) async {
     await t.pumpWidget(host((Future<DocScanResult?> _) {}));
     await t.tap(find.text('scan'));
     await settle(t, find.bySemanticsLabel('التقاط'));

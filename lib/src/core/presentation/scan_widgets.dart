@@ -240,46 +240,84 @@ class ScanHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final DocScanTheme t = DocScanTheme.of(context);
-    Widget side(Widget? w, AlignmentGeometry a) => Expanded(
-      child: Align(
-        alignment: a,
-        child: w == null ? null : FittedBox(fit: BoxFit.scaleDown, alignment: a, child: w),
-      ),
+    final bool actions = leading != null || trailing != null;
+    final Widget titleView = Semantics(
+      header: true,
+      label: titleWidget == null ? null : title,
+      child:
+          titleWidget ??
+          Text(
+            title,
+            style: t.bodyStyle.sized(16, 24).copyWith(color: color ?? t.onSurface, fontWeight: FontWeight.w700),
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
     );
-    // Design header: 16 at the sides, 12 above and below, a 16 / 24 bold title.
+    // Design header (pk7): 22 above, 16 at the sides, 12 below, 12 between the
+    // sides and the title, the title in the middle of the screen.
     return Container(
-      padding: ScanMetrics.header,
+      padding: actions ? ScanMetrics.headerWithActions : ScanMetrics.header,
       decoration: divider
           ? BoxDecoration(
               border: Border(bottom: BorderSide(color: t.surfaceTertiary)),
             )
           : null,
-      child: Row(
-        children: <Widget>[
-          side(leading, AlignmentDirectional.centerStart),
-          // Expanded, not Flexible: a short title must still take its share, or
-          // the trailing side ends beside the title instead of at the edge.
-          Expanded(
-            flex: 2,
-            child: Semantics(
-              header: true,
-              label: titleWidget == null ? null : title,
-              child:
-                  titleWidget ??
-                  Text(
-                    title,
-                    style: t.bodyStyle.sized(16, 24).copyWith(color: color ?? t.onSurface, fontWeight: FontWeight.w700),
-                    textAlign: TextAlign.center,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-            ),
-          ),
-          side(trailing, AlignmentDirectional.centerEnd),
-        ],
-      ),
+      child: actions
+          ? SizedBox(
+              height: ScanMetrics.headerRow,
+              child: CustomMultiChildLayout(
+                delegate: _HeaderLayout(Directionality.of(context)),
+                children: <Widget>[
+                  if (leading != null) LayoutId(id: _HeaderSlot.leading, child: leading!),
+                  LayoutId(id: _HeaderSlot.title, child: titleView),
+                  if (trailing != null) LayoutId(id: _HeaderSlot.trailing, child: trailing!),
+                ],
+              ),
+            )
+          : Center(child: titleView),
     );
   }
+}
+
+enum _HeaderSlot { leading, title, trailing }
+
+/// Lays the sides at their natural width (up to a third each), then the title
+/// at its own width: in the middle of the screen when it fits between two equal
+/// margins (the wider side plus the gap), else in the middle of the space the
+/// sides leave, so a long file name shows more of itself instead of being cut.
+class _HeaderLayout extends MultiChildLayoutDelegate {
+  _HeaderLayout(this.direction);
+
+  final TextDirection direction;
+
+  @override
+  void performLayout(Size size) {
+    final BoxConstraints side = BoxConstraints(maxWidth: size.width / 3, maxHeight: size.height);
+    final Size lead = hasChild(_HeaderSlot.leading) ? layoutChild(_HeaderSlot.leading, side) : Size.zero;
+    final Size trail = hasChild(_HeaderSlot.trailing) ? layoutChild(_HeaderSlot.trailing, side) : Size.zero;
+    final bool rtl = direction == TextDirection.rtl;
+    // The leading side is at the start: the right in Arabic.
+    final double leftWidth = rtl ? trail.width : lead.width;
+    final double rightWidth = rtl ? lead.width : trail.width;
+    if (hasChild(_HeaderSlot.leading)) {
+      positionChild(_HeaderSlot.leading, Offset(rtl ? size.width - lead.width : 0, (size.height - lead.height) / 2));
+    }
+    if (hasChild(_HeaderSlot.trailing)) {
+      positionChild(_HeaderSlot.trailing, Offset(rtl ? 0 : size.width - trail.width, (size.height - trail.height) / 2));
+    }
+    const double gap = ScanMetrics.headerGap;
+    final double free = (size.width - leftWidth - rightWidth - 2 * gap).clamp(0, size.width);
+    final Size title = layoutChild(_HeaderSlot.title, BoxConstraints(maxWidth: free, maxHeight: size.height));
+    final double margin = (leftWidth > rightWidth ? leftWidth : rightWidth) + gap;
+    final double x = title.width <= size.width - 2 * margin
+        ? (size.width - title.width) / 2
+        : leftWidth + gap + (free - title.width) / 2;
+    positionChild(_HeaderSlot.title, Offset(x, (size.height - title.height) / 2));
+  }
+
+  @override
+  bool shouldRelayout(_HeaderLayout old) => old.direction != direction;
 }
 
 /// A two-option segmented toggle, e.g. «تلقائي / يدوي».
