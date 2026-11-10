@@ -64,6 +64,8 @@ class _PhotoCamera implements CameraSource {
   @override
   Future<void> setFlash(ScanFlash flash) async {}
   @override
+  bool get hasFlash => true;
+  @override
   Future<void> pause() async {}
   @override
   Future<void> resume() async {}

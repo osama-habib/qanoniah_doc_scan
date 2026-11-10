@@ -192,7 +192,8 @@ class _CameraSheetState extends State<CameraSheet> with WidgetsBindingObserver, 
                         title: s.scanTitle,
                         color: t.onCameraSurface,
                         leading: _HeaderText(label: s.cancel, onTap: widget.onCancel),
-                        trailing: st.phase == CapturePhase.ready
+                        // Hidden on a camera without a flash (z8y71x6uuw).
+                        trailing: st.phase == CapturePhase.ready && st.hasFlash
                             ? _FlashButton(flash: st.flash, strings: s, onTap: cubit.cycleFlash)
                             : null,
                       ),
@@ -340,8 +341,10 @@ class _HeaderText extends StatelessWidget {
   }
 }
 
-/// The flash (pk3): its icon with the state written beside it. Tapping goes
-/// off, automatic, on, and back to off.
+/// The flash (pk3, z8y71x6uuw): a camera icon button like «تدوير», one glyph
+/// per state, 44 x 44 to touch. «تشغيل» is a light disc so it reads apart from
+/// «إيقاف» at a glance; the state's name shows for a second on change
+/// ([_FlashNote]). Tapping goes automatic, on, off, and back to automatic.
 class _FlashButton extends StatelessWidget {
   const _FlashButton({required this.flash, required this.strings, required this.onTap});
 
@@ -352,37 +355,118 @@ class _FlashButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final DocScanTheme t = DocScanTheme.of(context);
-    final String state = switch (flash) {
-      ScanFlash.auto => strings.flashAuto,
-      ScanFlash.on => strings.flashOn,
-      ScanFlash.off => strings.flashOff,
+    final DocScanIcons icons = t.icons;
+    final bool on = flash == ScanFlash.on;
+    final String? icon = switch (flash) {
+      ScanFlash.auto => icons.flash,
+      ScanFlash.on => icons.flashOn ?? icons.flash,
+      ScanFlash.off => icons.flashOff ?? icons.flash,
     };
-    final String? icon = flash == ScanFlash.on ? t.icons.flashOn ?? t.icons.flash : t.icons.flash;
-    // Off reads quieter than auto and on.
-    final Color color = flash == ScanFlash.off ? t.onCameraSurfaceMuted : t.onCameraSurface;
+    final Color fg = switch (flash) {
+      ScanFlash.on => t.cameraSurface,
+      ScanFlash.auto => t.onCameraSurface,
+      ScanFlash.off => t.onCameraSurfaceMuted,
+    };
+    final Color bg = on ? t.onCameraSurface : t.onCameraSurface.withValues(alpha: 0.14);
     return Semantics(
       button: true,
-      label: '${strings.flash}: $state',
+      label: strings.flashLabel(_flashState(strings, flash)),
       excludeSemantics: true,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: onTap,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minWidth: 64, minHeight: 36),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: <Widget>[
-              if (icon != null) ...<Widget>[
-                DocScanIcon(icon, size: t.iconSize * 0.75, color: color),
-                SizedBox(width: t.spaceXs),
-              ] else ...<Widget>[
-                Text(strings.flash, style: t.captionStyle.sized(13, 20).copyWith(color: color)),
-                SizedBox(width: t.spaceXs),
-              ],
-              Text(state, style: t.captionStyle.sized(13, 20).copyWith(color: color)),
-            ],
+        child: SizedBox.square(
+          dimension: 44,
+          child: Center(
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(color: bg, shape: BoxShape.circle),
+              alignment: Alignment.center,
+              child: icon != null
+                  ? DocScanIcon(icon, size: t.iconSize * 0.75, color: fg)
+                  // No flash glyph from the host: the state's name, shortened
+                  // to fit the disc.
+                  : Text(
+                      _flashState(strings, flash),
+                      style: t.captionStyle.sized(10, 12).copyWith(color: fg),
+                      maxLines: 1,
+                      overflow: TextOverflow.clip,
+                    ),
+            ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+String _flashState(DocScanStrings s, ScanFlash f) => switch (f) {
+  ScanFlash.auto => s.flashAuto,
+  ScanFlash.on => s.flashOn,
+  ScanFlash.off => s.flashOff,
+};
+
+/// «الفلاش: تلقائي» over the top of the picture for a second after the user
+/// changes the flash (z8y71x6uuw), in the hint's style. Not on the first frame:
+/// only a change shows it.
+class _FlashNote extends StatefulWidget {
+  const _FlashNote({required this.strings});
+
+  final DocScanStrings strings;
+
+  @override
+  State<_FlashNote> createState() => _FlashNoteState();
+}
+
+class _FlashNoteState extends State<_FlashNote> {
+  static const Duration _shown = Duration(milliseconds: 1200);
+  ScanFlash? _flash;
+  bool _visible = false;
+  Timer? _hide;
+
+  @override
+  void dispose() {
+    _hide?.cancel();
+    super.dispose();
+  }
+
+  void _show(ScanFlash f) {
+    _hide?.cancel();
+    setState(() {
+      _flash = f;
+      _visible = true;
+    });
+    _hide = Timer(_shown, () {
+      if (mounted) setState(() => _visible = false);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final DocScanTheme t = DocScanTheme.of(context);
+    final ScanFlash? f = _flash;
+    return BlocListener<CaptureCubit, CaptureState>(
+      listenWhen: (CaptureState a, CaptureState b) => a.flash != b.flash,
+      listener: (BuildContext _, CaptureState s) => _show(s.flash),
+      child: IgnorePointer(
+        child: AnimatedOpacity(
+          opacity: _visible ? 1 : 0,
+          duration: const Duration(milliseconds: 180),
+          child: f == null
+              ? const SizedBox.shrink()
+              // The button's own label already tells screen readers.
+              : ExcludeSemantics(
+                  child: Container(
+                    padding: EdgeInsets.symmetric(horizontal: t.spaceMd, vertical: t.spaceXs),
+                    decoration: BoxDecoration(color: t.scrim, borderRadius: BorderRadius.circular(t.radiusLg)),
+                    child: Text(
+                      widget.strings.flashNote(_flashState(widget.strings, f)),
+                      style: t.captionStyle.copyWith(color: t.onCameraSurface),
+                    ),
+                  ),
+                ),
         ),
       ),
     );
@@ -478,6 +562,12 @@ class _Viewfinder extends StatelessWidget {
               ),
             Positioned.fill(
               child: CaptureFlash(shots: state.shots, color: t.captureFlash),
+            ),
+            PositionedDirectional(
+              top: t.spaceMd,
+              start: t.spaceMd,
+              end: t.spaceMd,
+              child: Center(child: _FlashNote(strings: strings)),
             ),
             if (message != null)
               PositionedDirectional(

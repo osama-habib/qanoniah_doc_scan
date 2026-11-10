@@ -60,8 +60,12 @@ abstract class CaptureState with _$CaptureState {
     @Default(0) int straightenTurns,
     @Default(0) int straightens,
 
-    /// The flash for the next stills (pk3).
-    @Default(ScanFlash.off) ScanFlash flash,
+    /// The flash for the next stills (pk3); automatic at the start of a scan
+    /// (z8y71x6uuw).
+    @Default(ScanFlash.auto) ScanFlash flash,
+
+    /// False on a camera without a flash: the flash button hides.
+    @Default(true) bool hasFlash,
 
     /// The camera paused itself after [CaptureCubit.idleAfter] without a capture,
     /// so the phone does not heat up; «استئناف الكاميرا» wakes it (pk5).
@@ -93,7 +97,7 @@ class CaptureCubit extends Cubit<CaptureState> {
     this.rearmDistance = 0.1,
     this.rearmContentChange = 18,
     this.idleAfter = const Duration(seconds: 10),
-    ScanFlash initialFlash = ScanFlash.off,
+    ScanFlash initialFlash = ScanFlash.auto,
     this.onFlashChanged,
   }) : _camera = camera,
        _edges = edges,
@@ -162,12 +166,13 @@ class CaptureCubit extends Cubit<CaptureState> {
     _stillHere();
   }
 
-  /// The flash button: off, then automatic, then always, then off again.
+  /// The flash button: automatic, then on, then off, then automatic again
+  /// (z8y71x6uuw).
   Future<void> cycleFlash() async {
     final ScanFlash next = switch (state.flash) {
-      ScanFlash.off => ScanFlash.auto,
       ScanFlash.auto => ScanFlash.on,
       ScanFlash.on => ScanFlash.off,
+      ScanFlash.off => ScanFlash.auto,
     };
     emit(state.copyWith(flash: next));
     onFlashChanged?.call(next);
@@ -198,7 +203,7 @@ class CaptureCubit extends Cubit<CaptureState> {
     if (opened.isLeft()) return _denied(opened);
     await _camera.setFlash(state.flash);
     if (isClosed) return;
-    emit(state.copyWith(phase: CapturePhase.ready));
+    emit(state.copyWith(phase: CapturePhase.ready, hasFlash: _camera.hasFlash));
     _frames = _camera.frames.listen(_onFrame);
     _stillHere();
   }

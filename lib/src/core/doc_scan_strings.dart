@@ -53,6 +53,8 @@ class DocScanStrings {
     required this.flashAuto,
     required this.flashOn,
     required this.flashOff,
+    required this.flashLabel,
+    required this.flashNote,
     required this.cameraPaused,
     required this.resumeCamera,
     required this.discardTitle,
@@ -163,6 +165,12 @@ class DocScanStrings {
   final String flashAuto;
   final String flashOn;
   final String flashOff;
+
+  /// The flash button for screen readers: «الفلاش، تلقائي».
+  final String Function(String state) flashLabel;
+
+  /// Shown for about a second after the flash changes: «الفلاش: تلقائي».
+  final String Function(String state) flashNote;
 
   /// The camera paused itself after a while without a capture.
   final String cameraPaused;
@@ -301,6 +309,8 @@ class DocScanStrings {
       flashAuto: 'تلقائي',
       flashOn: 'تشغيل',
       flashOff: 'إيقاف',
+      flashLabel: (String state) => 'الفلاش، $state',
+      flashNote: (String state) => 'الفلاش: $state',
       cameraPaused: 'توقفت الكاميرا لتوفير البطارية',
       resumeCamera: 'استئناف الكاميرا',
       discardTitle: 'تجاهل المسح؟',
@@ -411,6 +421,8 @@ class DocScanStrings {
       flashAuto: 'Auto',
       flashOn: 'On',
       flashOff: 'Off',
+      flashLabel: (String state) => 'Flash, $state',
+      flashNote: (String state) => 'Flash: $state',
       cameraPaused: 'The camera paused to save battery',
       resumeCamera: 'Resume camera',
       discardTitle: 'Discard this scan?',
@@ -516,6 +528,8 @@ class DocScanStrings {
     String? flashAuto,
     String? flashOn,
     String? flashOff,
+    String Function(String state)? flashLabel,
+    String Function(String state)? flashNote,
     String? cameraPaused,
     String? resumeCamera,
     String? discardTitle,
@@ -617,6 +631,8 @@ class DocScanStrings {
       flashAuto: flashAuto ?? this.flashAuto,
       flashOn: flashOn ?? this.flashOn,
       flashOff: flashOff ?? this.flashOff,
+      flashLabel: flashLabel ?? this.flashLabel,
+      flashNote: flashNote ?? this.flashNote,
       cameraPaused: cameraPaused ?? this.cameraPaused,
       resumeCamera: resumeCamera ?? this.resumeCamera,
       discardTitle: discardTitle ?? this.discardTitle,

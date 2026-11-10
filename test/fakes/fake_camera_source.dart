@@ -8,7 +8,7 @@ import 'package:qanoniah_doc_scan/src/core/failures.dart';
 
 /// Camera with scripted frames and stills written into [outDir].
 class FakeCameraSource implements CameraSource {
-  FakeCameraSource({required this.outDir, this.initResult});
+  FakeCameraSource({required this.outDir, this.initResult, this.hasFlash = true});
 
   final Directory outDir;
 
@@ -43,7 +43,10 @@ class FakeCameraSource implements CameraSource {
   }
 
   /// The last flash the capture asked for.
-  ScanFlash flash = ScanFlash.off;
+  ScanFlash flash = ScanFlash.auto;
+
+  @override
+  final bool hasFlash;
 
   @override
   Future<void> setFlash(ScanFlash flash) async => this.flash = flash;

@@ -34,6 +34,7 @@ class DocScanIcons {
     String? rotate,
     this.flash,
     this.flashOn,
+    this.flashOff,
   }) : _rotate = rotate;
 
   final String close;
@@ -48,10 +49,12 @@ class DocScanIcons {
   String get rotate => _rotate ?? retake;
   final String? _rotate;
 
-  /// The camera's flash button when the flash is off or automatic, and when it
-  /// is on (pk3). Null: the button shows its state as text only.
+  /// The camera's flash button, one glyph per state (z8y71x6uuw): [flash]
+  /// automatic, [flashOn] on, [flashOff] off. A missing [flashOn] or [flashOff]
+  /// falls back to [flash]; a missing [flash] shows the state as text.
   final String? flash;
   final String? flashOn;
+  final String? flashOff;
   final String delete;
   final String crop;
   final String filters;

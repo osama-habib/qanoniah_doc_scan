@@ -39,7 +39,7 @@ void main() {
   CaptureCubit cubit({
     String? replacing,
     Duration idleAfter = const Duration(seconds: 10),
-    ScanFlash initialFlash = ScanFlash.off,
+    ScanFlash initialFlash = ScanFlash.auto,
     void Function(ScanFlash)? onFlashChanged,
   }) => CaptureCubit(
     camera: camera,
@@ -284,7 +284,31 @@ void main() {
     await c.close();
   });
 
-  test('[UT] the flash goes off, auto, on, off; the camera and the flow get each choice (pk3)', () async {
+  test('[UT] a new scan starts with the flash on «تلقائي»', () async {
+    final CaptureCubit c = CaptureCubit(
+      camera: camera,
+      edges: edges,
+      permissions: permissions,
+      preparer: preparer,
+      sessions: sessions,
+      recognition: recognition,
+      onEvent: events.add,
+    );
+    await c.start();
+    expect((c.state.flash, camera.flash), (ScanFlash.auto, ScanFlash.auto));
+    expect(c.state.hasFlash, isTrue);
+    await c.close();
+  });
+
+  test('[UT] a camera without a flash says so to the state', () async {
+    camera = FakeCameraSource(outDir: tmp, hasFlash: false);
+    final CaptureCubit c = cubit();
+    await c.start();
+    expect(c.state.hasFlash, isFalse);
+    await c.close();
+  });
+
+  test('[UT] the flash goes auto, on, off, auto; the camera and the flow get each choice (z8y71x6uuw)', () async {
     final List<ScanFlash> told = <ScanFlash>[];
     final CaptureCubit c = cubit(initialFlash: ScanFlash.auto, onFlashChanged: told.add);
     await c.start();

@@ -257,7 +257,9 @@ class ScanHeader extends StatelessWidget {
       child: Row(
         children: <Widget>[
           side(leading, AlignmentDirectional.centerStart),
-          Flexible(
+          // Expanded, not Flexible: a short title must still take its share, or
+          // the trailing side ends beside the title instead of at the edge.
+          Expanded(
             flex: 2,
             child: Semantics(
               header: true,

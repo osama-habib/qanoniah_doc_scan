@@ -21,6 +21,7 @@ class CameraFrame {
 }
 
 /// The flash for stills (pk3): fires when the scene is dark, always, or never.
+/// The button cycles them in this order (ClickUp z8y71x6uuw).
 enum ScanFlash { auto, on, off }
 
 /// The camera, behind a port so capture logic is testable without hardware
@@ -39,6 +40,11 @@ abstract interface class CameraSource {
 
   /// The flash for the next stills; kept across [pause] and [resume].
   Future<void> setFlash(ScanFlash flash);
+
+  /// False when the camera turned out to have no flash (an iPad, say); the
+  /// flash button hides. Known after [initialize]. Android's camera plugin does
+  /// not say, so it stays true there.
+  bool get hasFlash;
 
   /// Releases the camera while the app is in the background.
   Future<void> pause();
@@ -64,7 +70,11 @@ class CameraPluginSource implements CameraSource {
   CameraDescription? _description;
   DateTime _lastFrame = DateTime.fromMillisecondsSinceEpoch(0);
   bool _streaming = false;
-  ScanFlash _flash = ScanFlash.off;
+  ScanFlash _flash = ScanFlash.auto;
+  bool _hasFlash = true;
+
+  @override
+  bool get hasFlash => _hasFlash;
 
   static FlashMode _mode(ScanFlash f) => switch (f) {
     ScanFlash.auto => FlashMode.auto,
@@ -76,7 +86,7 @@ class CameraPluginSource implements CameraSource {
   Future<void> setFlash(ScanFlash flash) async {
     _flash = flash;
     final CameraController? c = _controller;
-    if (c == null || !c.value.isInitialized) return;
+    if (c == null || !c.value.isInitialized || !_hasFlash) return;
     try {
       await c.setFlashMode(_mode(flash));
     } on CameraException {
@@ -116,7 +126,8 @@ class CameraPluginSource implements CameraSource {
     try {
       await c.setFlashMode(_mode(_flash));
     } on CameraException {
-      // No flash on this camera.
+      // iOS refuses every flash mode on a camera without a flash.
+      _hasFlash = false;
     }
     await c.lockCaptureOrientation(DeviceOrientation.portraitUp);
     _controller = c;
