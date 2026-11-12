@@ -138,17 +138,37 @@ void main() {
     expect(quad.value.topRight.dy, closeTo(0.2, 0.01));
   });
 
-  testWidgets('[UT] a magnifier shows the spot under the finger while dragging, then goes', (WidgetTester t) async {
+  testWidgets('[UT] a magnifier shows the photo under the finger while dragging, then goes', (WidgetTester t) async {
     await pump(t);
     final TestGesture g = await t.startGesture(const Offset(60, 80)); // top left corner
     await g.moveBy(const Offset(10, 10));
     await t.pump();
-    expect(find.byType(RawMagnifier), findsOneWidget);
-    // Design 03-b: 2.6x, a dot on the exact corner.
-    expect(t.widget<RawMagnifier>(find.byType(RawMagnifier)).magnificationScale, 2.6);
-    expect(find.byKey(const ValueKey<String>('loupe-dot')), findsOneWidget);
+    final Finder loupe = find.byKey(const ValueKey<String>('loupe'));
+    expect(loupe, findsOneWidget);
+    expect(find.descendant(of: loupe, matching: find.byKey(const ValueKey<String>('loupe-dot'))), findsOneWidget);
     await g.up();
     await t.pump();
-    expect(find.byType(RawMagnifier), findsNothing);
+    expect(loupe, findsNothing);
   });
+
+  testWidgets('[UT] the loupe is the photo 2.6x centred on the corner, with no handle in it (pk4 reopened)', (
+    WidgetTester t,
+  ) async {
+    await pump(t);
+    final TestGesture g = await t.startGesture(const Offset(60, 80)); // top left corner
+    await g.moveBy(const Offset(10, 10));
+    await t.pump();
+    final Finder loupe = find.byKey(const ValueKey<String>('loupe'));
+    // No handle is drawn inside it: the held one used to fill it, blue.
+    expect(find.descendant(of: loupe, matching: find.byType(AnimatedScale)), findsNothing);
+    expect(find.descendant(of: loupe, matching: find.byType(AnimatedContainer)), findsNothing);
+    // The photo in it is 2.6 times the photo's box (300 x 400) ...
+    final Rect photo = t.getRect(find.descendant(of: loupe, matching: find.byType(Image)));
+    expect(photo.size, const Size(300 * 2.6, 400 * 2.6));
+    // ... placed so the corner (now 70, 90 in the box) is the loupe's centre.
+    final Offset corner = photo.topLeft + const Offset(70, 90) * 2.6;
+    expect((corner - t.getCenter(loupe)).distance, lessThan(1));
+    await g.up();
+  });
+
 }

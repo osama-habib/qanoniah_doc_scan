@@ -222,19 +222,25 @@ class _CornerEditorState extends State<CornerEditor> {
                 builder: (BuildContext context, BoxConstraints c) {
                   Offset px(Offset n) => Offset(n.dx * c.maxWidth, n.dy * c.maxHeight);
                   final Offset? focus = _focus;
+                  // The photo with the page outlined and the rest dimmed; the
+                  // loupe shows this same layer, so the two never differ.
+                  final Widget page = Stack(
+                    fit: StackFit.expand,
+                    children: <Widget>[
+                      Image.file(widget.photo, fit: BoxFit.fill, gaplessPlayback: true),
+                      CustomPaint(
+                        painter: _MaskPainter(
+                          quad: widget.quad,
+                          accent: t.frameDetected,
+                          dim: t.cameraSurface.withValues(alpha: 0.5),
+                        ),
+                      ),
+                    ],
+                  );
                   return Stack(
                     clipBehavior: Clip.none,
                     children: <Widget>[
-                      Positioned.fill(child: Image.file(widget.photo, fit: BoxFit.fill, gaplessPlayback: true)),
-                      Positioned.fill(
-                        child: CustomPaint(
-                          painter: _MaskPainter(
-                            quad: widget.quad,
-                            accent: t.frameDetected,
-                            dim: t.cameraSurface.withValues(alpha: 0.5),
-                          ),
-                        ),
-                      ),
+                      Positioned.fill(child: page),
                       for (int e = 0; e < 4; e++)
                         Positioned(
                           left: px(_edgeMid(e)).dx - hit / 2,
@@ -308,30 +314,24 @@ class _CornerEditorState extends State<CornerEditor> {
                           builder: (BuildContext context) {
                             final Offset at = px(focus);
                             final double up = at.dy - lift - lens / 2 < -lift / 2 ? -lift : lift;
-                            // Design 03-b: 2.6x, with a dot in the middle on the
-                            // exact corner.
+                            // Design 03-b, as drawn (pk4 reopened 2026-11-12): the
+                            // photo itself 2.6x, the page's sides over it and a
+                            // ring on the exact corner. It draws the photo, not
+                            // the screen, so the held handle never fills it.
                             return Positioned(
                               left: at.dx - lens / 2,
                               top: at.dy - up - lens / 2,
                               child: IgnorePointer(
-                                child: RawMagnifier(
-                                  size: const Size(lens, lens),
-                                  magnificationScale: 2.6,
-                                  focalPointOffset: Offset(0, up),
-                                  decoration: MagnifierDecoration(
-                                    shape: CircleBorder(side: BorderSide(color: t.frameDetected, width: 2)),
-                                    shadows: <BoxShadow>[
-                                      BoxShadow(color: t.scrim.withValues(alpha: 0.35), blurRadius: 8),
-                                    ],
-                                  ),
-                                  child: Center(
-                                    child: Container(
-                                      key: const ValueKey<String>('loupe-dot'),
-                                      width: t.spaceXs + 2,
-                                      height: t.spaceXs + 2,
-                                      decoration: BoxDecoration(color: t.frameDetected, shape: BoxShape.circle),
-                                    ),
-                                  ),
+                                child: _Loupe(
+                                  key: const ValueKey<String>('loupe'),
+                                  page: page,
+                                  box: Size(c.maxWidth, c.maxHeight),
+                                  focus: at,
+                                  size: lens,
+                                  zoom: 2.6,
+                                  line: t.frameDetected,
+                                  rim: t.onCameraSurface,
+                                  shadow: t.scrim.withValues(alpha: 0.35),
                                 ),
                               ),
                             );
@@ -436,4 +436,76 @@ class _MaskPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_MaskPainter old) => old.quad != quad || old.accent != accent || old.dim != dim;
+}
+
+/// The magnifier of design 03-b: the editor's own [page] layer (the photo with
+/// the page outlined) [zoom] times around [focus] (in the photo's box of size
+/// [box]), a small ring on the point, and a light rim. The handles are not in
+/// it, so the one being held never fills it (pk4 reopened 2026-11-12).
+class _Loupe extends StatelessWidget {
+  const _Loupe({
+    super.key,
+    required this.page,
+    required this.box,
+    required this.focus,
+    required this.size,
+    required this.zoom,
+    required this.line,
+    required this.rim,
+    required this.shadow,
+  });
+
+  final Widget page;
+  final Size box;
+  final Offset focus;
+  final double size;
+  final double zoom;
+  final Color line;
+  final Color rim;
+  final Color shadow;
+
+  @override
+  Widget build(BuildContext context) {
+    // Where the layer's origin lands so that [focus] is in the middle. Laid out
+    // at the zoomed size (not transformed), its outline keeps its own width.
+    final Offset origin = Offset(size / 2, size / 2) - focus * zoom;
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        boxShadow: <BoxShadow>[BoxShadow(color: shadow, blurRadius: 8)],
+      ),
+      // The rim is drawn over the content, so it takes no room from it and the
+      // point stays in the exact middle.
+      foregroundDecoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(color: rim, width: 3),
+      ),
+      child: ClipOval(
+        child: Stack(
+          children: <Widget>[
+            Positioned(
+              left: origin.dx,
+              top: origin.dy,
+              width: box.width * zoom,
+              height: box.height * zoom,
+              child: page,
+            ),
+            Center(
+              child: Container(
+                key: const ValueKey<String>('loupe-dot'),
+                width: 12,
+                height: 12,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: line, width: 2),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
