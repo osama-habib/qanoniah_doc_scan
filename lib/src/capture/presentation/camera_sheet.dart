@@ -27,6 +27,7 @@ class CameraSheet extends StatefulWidget {
     required this.strings,
     required this.preview,
     required this.onCancel,
+    this.onBack,
     required this.onReview,
   });
 
@@ -35,6 +36,10 @@ class CameraSheet extends StatefulWidget {
   /// The camera's live preview, from the camera source.
   final Widget Function() preview;
   final VoidCallback onCancel;
+
+  /// Back to where the camera was opened from («إضافة صفحة» or a retake on
+  /// review). When set, it takes «إلغاء»'s place in the header.
+  final VoidCallback? onBack;
 
   /// «مراجعة الصفحات»; also where the flow goes after a retake.
   final VoidCallback onReview;
@@ -192,7 +197,16 @@ class _CameraSheetState extends State<CameraSheet> with WidgetsBindingObserver, 
                       ScanHeader(
                         title: s.scanTitle,
                         color: t.onCameraSurface,
-                        leading: _HeaderText(label: s.cancel, onTap: widget.onCancel),
+                        leading: widget.onBack == null
+                            ? _HeaderText(label: s.cancel, onTap: widget.onCancel)
+                            : ScanIconButton(
+                                icon: t.icons.back,
+                                label: s.back,
+                                mirrorInRtl: true,
+                                color: t.onCameraSurface,
+                                background: t.onCameraSurface.withValues(alpha: 0.12),
+                                onPressed: widget.onBack,
+                              ),
                         // Hidden on a camera without a flash (z8y71x6uuw).
                         trailing: st.phase == CapturePhase.ready && st.hasFlash
                             ? _TorchButton(on: st.flash == ScanFlash.torch, strings: s, onTap: cubit.toggleTorch)
@@ -231,7 +245,6 @@ class _CameraSheetState extends State<CameraSheet> with WidgetsBindingObserver, 
                       if (st.adjustFile != null)
                         _AdjustBar(
                           strings: s,
-                          onRotate: cubit.rotateAdjusted,
                           onRetake: () {
                             setState(() => _adjusted = null);
                             unawaited(cubit.retakeAdjusted());
@@ -714,19 +727,17 @@ class _BottomBar extends StatelessWidget {
   }
 }
 
-/// The corner step's bar: «إعادة الالتقاط», «تدوير» and «حفظ الصفحة» (design
-/// `scanAdjOn`, rotation added 2026-11-04).
+/// The corner step's bar: «إعادة الالتقاط» and «حفظ الصفحة» (design `scanAdjOn`;
+/// «تدوير» removed by the owner, 2026-11-15: the page turns upright by itself).
 class _AdjustBar extends StatelessWidget {
-  const _AdjustBar({required this.strings, required this.onRotate, required this.onRetake, required this.onKeep});
+  const _AdjustBar({required this.strings, required this.onRetake, required this.onKeep});
 
   final DocScanStrings strings;
-  final VoidCallback onRotate;
   final VoidCallback onRetake;
   final VoidCallback onKeep;
 
   @override
   Widget build(BuildContext context) {
-    final DocScanTheme t = DocScanTheme.of(context);
     return Padding(
       padding: ScanMetrics.cameraBar,
       child: SizedBox(
@@ -735,14 +746,6 @@ class _AdjustBar extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: <Widget>[
             _Pill(label: strings.retake, height: 44, padding: 18, quiet: true, onTap: onRetake),
-            ScanIconButton(
-              icon: t.icons.rotate,
-              label: strings.rotate,
-              onPressed: onRotate,
-              color: t.onCameraSurface,
-              background: t.onCameraSurface.withValues(alpha: 0.14),
-              size: t.iconSize,
-            ),
             _Pill(label: strings.savePage, height: 44, padding: 20, onTap: onKeep),
           ],
         ),
@@ -778,20 +781,24 @@ class _Pill extends StatelessWidget {
         child: InkWell(
           customBorder: const StadiumBorder(),
           onTap: onTap,
+          // As wide as its label: `alignment` alone would stretch it over its
+          // whole slot, up against the shutter.
           child: Container(
             height: height,
             padding: EdgeInsets.symmetric(horizontal: padding),
-            alignment: Alignment.center,
-            child: Text(
-              label,
-              maxLines: 1,
-              softWrap: false,
-              style: t.buttonStyle
-                  .sized(14, 20)
-                  .copyWith(
-                    fontWeight: quiet ? FontWeight.w500 : FontWeight.w700,
-                    color: quiet ? t.onCameraSurface : t.primary,
-                  ),
+            child: Center(
+              widthFactor: 1,
+              child: Text(
+                label,
+                maxLines: 1,
+                softWrap: false,
+                style: t.buttonStyle
+                    .sized(14, 20)
+                    .copyWith(
+                      fontWeight: quiet ? FontWeight.w500 : FontWeight.w700,
+                      color: quiet ? t.onCameraSurface : t.primary,
+                    ),
+              ),
             ),
           ),
         ),

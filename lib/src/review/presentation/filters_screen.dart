@@ -260,15 +260,6 @@ class _FiltersScreenState extends State<FiltersScreen> {
                                     color: t.onCameraSurfaceMuted,
                                     onPressed: () => _apply(cubit, page, const <PageFilter>{PageFilter.original}),
                                   ),
-                                // «تدوير» for this page (not in the design: kept out of
-                                // the header, which follows it).
-                                ScanIconButton(
-                                  icon: t.icons.rotate,
-                                  label: s.rotate,
-                                  color: t.onCameraSurface,
-                                  background: t.onCameraSurface.withValues(alpha: 0.12),
-                                  onPressed: st.working ? null : () => unawaited(cubit.rotate(page.id)),
-                                ),
                               ],
                             ),
                           ),

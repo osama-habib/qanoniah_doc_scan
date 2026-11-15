@@ -40,6 +40,13 @@ import 'session/scan_session_repo.dart';
 abstract final class DocScan {
   static bool _running = false;
 
+  /// A scan is open, or its files are still being deleted.
+  @visibleForTesting
+  static bool get running => _running;
+
+  /// Deleting a cancelled scan's files, after its sheet has gone.
+  static Future<void>? _cleanup;
+
   /// Test-only replacement for the platform ports.
   @visibleForTesting
   static ScanFlowDeps Function()? debugDeps;
@@ -58,7 +65,7 @@ abstract final class DocScan {
     _running = true;
     config.onEvent?.call(DocScanEvent.started());
     try {
-      return await Navigator.of(context, rootNavigator: true).push<DocScanResult>(
+      final DocScanResult? result = await Navigator.of(context, rootNavigator: true).push<DocScanResult>(
         // Design `qn-scan-in`: the sheet slides up over 420 ms.
         // Not opaque: the screen the scan was opened from stays painted under
         // the sheet, so a pull down shows it (owner, 2026-11-10). The sheet
@@ -73,7 +80,12 @@ abstract final class DocScan {
           transitionsBuilder: (BuildContext _, Animation<double> _, Animation<double> _, Widget child) => child,
         ),
       );
+      // A cancelled scan's files go once its sheet has slid away; the host gets
+      // the result only after, so nothing is left behind.
+      await _cleanup;
+      return result;
     } finally {
+      _cleanup = null;
       _running = false;
     }
   }
@@ -235,9 +247,8 @@ class _DocScanFlowState extends State<DocScanFlow> {
     _step = _Step.build;
   });
 
-  // TODO(unused): «إلغاء» and the pull-down close the scan from every step now
-  // (pk2, `_requestClose`); kept for a back that returns to review instead.
-  // ignore: unused_element
+  /// The camera's back when it was opened from review («إضافة صفحة», a
+  /// retake): to review with every page kept; with none, the scan closes.
   void _cameraCancelled() {
     if (_sessions.session.pages.isNotEmpty) return _openReview();
     _cancel(ScanStep.capture);
@@ -273,8 +284,27 @@ class _DocScanFlowState extends State<DocScanFlow> {
     _closing = true;
     _emit(DocScanEvent.cancelled(step: step));
     _recognition.dispose();
-    await _sessions.cancel();
+    // The sheet still shows its pages while it slides away: their files are
+    // deleted after, or the images still loading would find them gone.
+    final Animation<double>? exit = ModalRoute.of(context)?.animation;
+    DocScan._cleanup = _gone(exit).then((_) => _sessions.cancel());
     if (mounted) Navigator.of(context).pop();
+    await DocScan._cleanup;
+  }
+
+  /// Completes once [route] has finished its exit animation (at once without
+  /// one).
+  static Future<void> _gone(Animation<double>? route) {
+    if (route == null || route.status == AnimationStatus.dismissed) return Future<void>.value();
+    final Completer<void> done = Completer<void>();
+    void listen(AnimationStatus s) {
+      if (s != AnimationStatus.dismissed) return;
+      route.removeStatusListener(listen);
+      done.complete();
+    }
+
+    route.addStatusListener(listen);
+    return done.future;
   }
 
   Future<void> _attach() async {
@@ -337,6 +367,8 @@ class _DocScanFlowState extends State<DocScanFlow> {
       canPop: false,
       onPopInvokedWithResult: (bool didPop, Object? _) {
         if (didPop) return;
+        // The system back goes where the header's does.
+        if (_step == _Step.camera && _fromReview) return _cameraCancelled();
         unawaited(_requestClose());
       },
       child: Scaffold(
@@ -390,6 +422,7 @@ class _DocScanFlowState extends State<DocScanFlow> {
             strings: s,
             preview: camera.preview,
             onCancel: _requestClose,
+            onBack: _fromReview ? _cameraCancelled : null,
             // The camera always hands over to «توضيح الصفحات» (design).
             onReview: () {
               final bool added = _fromReview && _sessions.session.pages.length > _pagesBeforeVisit;

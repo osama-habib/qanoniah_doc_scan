@@ -335,6 +335,8 @@ class CaptureCubit extends Cubit<CaptureState> {
     });
   }
 
+  // TODO(unused): «تدوير» was removed from the screens by the owner
+  // (2026-11-15); kept in case it comes back.
   /// «تدوير» on the corner step: a quarter turn counter-clockwise.
   void rotateAdjusted() {
     if (state.adjustFile == null) return;

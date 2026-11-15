@@ -46,8 +46,9 @@ class DocScanIcons {
   final String addPage;
   final String retake;
 
-  /// «تدوير» on the corner step (iconsax `rotate-left`). Null: the retake icon,
-  /// which is the same glyph in the Qanoniah set.
+  /// «تدوير» (iconsax `rotate-left`). Null: the retake icon, which is the same
+  /// glyph in the Qanoniah set. TODO(unused): no screen shows it since
+  /// 2026-11-15; kept so hosts' icon sets stay valid.
   String get rotate => _rotate ?? retake;
   final String? _rotate;
 

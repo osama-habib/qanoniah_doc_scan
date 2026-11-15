@@ -102,6 +102,8 @@ class ReviewCubit extends Cubit<ReviewState> {
     }
   }
 
+  // TODO(unused): «تدوير» was removed from the screens by the owner
+  // (2026-11-15); kept in case it comes back.
   /// «تدوير» on «توضيح الصفحات»: a quarter turn counter-clockwise of one page.
   Future<void> rotate(String pageId) async {
     final CapturedPage? page = _page(pageId);
@@ -116,6 +118,9 @@ class ReviewCubit extends Cubit<ReviewState> {
     final Map<PageFilter, File> cached = _previews[key] ??= <PageFilter, File>{};
     for (final PageFilter f in filters) {
       if (cached.containsKey(f)) continue;
+      // The scan closed while earlier previews were being made: its session and
+      // folder are gone, so stop here.
+      if (isClosed || !_sessions.active) break;
       final File out = _sessions.newFile('jpg');
       final File ocr = _sessions.newFile('png');
       final Either<StorageFailure, Unit> r = await _preparer.prepare(

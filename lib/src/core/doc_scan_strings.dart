@@ -157,7 +157,8 @@ class DocScanStrings {
   final String savePage;
   final String retake;
 
-  /// «تدوير»: a quarter turn of the page on the corner step.
+  /// «تدوير»: a quarter turn of the page. TODO(unused): no screen shows it
+  /// since 2026-11-15; kept so hosts' strings stay valid.
   final String rotate;
 
   /// «الفلاش» on the camera header.

@@ -112,7 +112,8 @@ void main() {
   /// Until the scan's route has gone. The app's own «scan» button stays on
   /// screen under the sheet, so it no longer tells the scan closed.
   Future<void> closed(WidgetTester t) async {
-    for (int i = 0; i < 100 && find.byType(DocScanFlow).evaluate().isNotEmpty; i++) {
+    // Gone from screen, and its files deleted (the next scan may start).
+    for (int i = 0; i < 100 && (find.byType(DocScanFlow).evaluate().isNotEmpty || DocScan.running); i++) {
       await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
       await t.pump(const Duration(milliseconds: 50));
     }
@@ -146,6 +147,33 @@ void main() {
       await t.pump(const Duration(milliseconds: 50));
     }
   }
+
+  /// The scan's result, pumping meanwhile: a cancelled scan's files are
+  /// deleted after its sheet has gone, before the result arrives.
+  Future<DocScanResult?> outcome(WidgetTester t, Future<DocScanResult?> result) async {
+    bool done = false;
+    DocScanResult? value;
+    unawaited(result.then((DocScanResult? r) {
+      value = r;
+      done = true;
+    }));
+    for (int i = 0; i < 200 && !done; i++) {
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+      await t.pump(const Duration(milliseconds: 20));
+    }
+    expect(done, isTrue, reason: 'the scan returned');
+    return value;
+  }
+
+  /// Pulls the sheet down from [from] (a header) and discards the scan.
+  Future<void> discard(WidgetTester t, {required Finder from}) async {
+    await t.dragFrom(t.getCenter(from), const Offset(0, 300));
+    await settle(t, find.text('تجاهل المسح؟'));
+    await frames(t);
+    await t.tap(find.text('تجاهل المسح'));
+    await closed(t);
+  }
+
 
   /// Shutter, then «حفظ الصفحة» on the corner step.
   Future<void> capturePage(WidgetTester t) async {
@@ -210,7 +238,7 @@ void main() {
     expect(() => DocScan.start(ctx, config()), throwsStateError);
     await t.tap(find.text('إلغاء'));
     await closed(t);
-    final DocScanResult? r = await t.runAsync<DocScanResult?>(() => result);
+    final DocScanResult? r = await outcome(t, result);
     expect(r, isNull);
     expect(sessionDirs(), isEmpty);
     expect(events.last.name, 'scan_cancelled');
@@ -240,7 +268,7 @@ void main() {
     await frames(t);
     await t.tap(find.text('تجاهل المسح'));
     await closed(t);
-    expect(await t.runAsync<DocScanResult?>(() => result), isNull);
+    expect(await outcome(t, result), isNull);
     expect(sessionDirs(), isEmpty);
     expect(events.last.name, 'scan_cancelled');
   });
@@ -261,7 +289,7 @@ void main() {
     await frames(t);
     await t.tap(find.text('تجاهل المسح'));
     await closed(t);
-    expect(await t.runAsync<DocScanResult?>(() => result), isNull);
+    expect(await outcome(t, result), isNull);
     expect(sessionDirs(), isEmpty);
   });
 
@@ -341,7 +369,7 @@ void main() {
       await t.pump();
       if (find.byType(DocScanFlow).evaluate().isEmpty) break;
     }
-    await t.runAsync(() => result);
+    await outcome(t, result);
   });
 
   testWidgets('[IT] dragging a corner down on the corner step moves the corner, never the sheet (uv0)', (
@@ -374,6 +402,67 @@ void main() {
     // No page kept yet: «إلغاء» closes at once.
     await t.tap(find.text('إلغاء'));
     await closed(t);
+  });
+
+  testWidgets('[IT] the camera opened from review has a back, not «إلغاء»; it returns with every page', (
+    WidgetTester t,
+  ) async {
+    await t.pumpWidget(host((Future<DocScanResult?> _) {}));
+    await t.tap(find.text('scan'));
+    await settle(t, find.bySemanticsLabel('التقاط'));
+    // First visit: «إلغاء», no back.
+    expect(find.text('إلغاء'), findsOneWidget);
+    expect(find.bySemanticsLabel('رجوع'), findsNothing);
+    await capturePage(t);
+    await t.tap(find.text('حفظ (1)'));
+    await settle(t, find.text('التالي'));
+    await t.tap(find.text('التالي'));
+    await settle(t, find.text('إضافة صفحة'));
+    await t.tap(find.text('إضافة صفحة'));
+    await settle(t, find.bySemanticsLabel('التقاط'));
+    await frames(t);
+    // From review: a back where «إلغاء» was.
+    expect(find.text('إلغاء'), findsNothing);
+    await t.tap(find.bySemanticsLabel('رجوع'));
+    await settle(t, find.text('مراجعة الصفحات'));
+    await frames(t);
+    expect(find.text('صفحة 1'), findsOneWidget, reason: 'the page is kept');
+    expect(find.text('تجاهل المسح؟'), findsNothing, reason: 'back is not a close');
+    await discard(t, from: find.text('مراجعة الصفحات'));
+  });
+
+  testWidgets('[UT] «حفظ (N)» is as wide as its label, clear of the shutter', (WidgetTester t) async {
+    await t.pumpWidget(host((Future<DocScanResult?> _) {}));
+    await t.tap(find.text('scan'));
+    await settle(t, find.bySemanticsLabel('التقاط'));
+    await capturePage(t);
+    await frames(t);
+    final Rect pill = t.getRect(find.ancestor(of: find.text('حفظ (1)'), matching: find.byType(Material)).first);
+    final Rect label = t.getRect(find.text('حفظ (1)'));
+    final Rect shutter = t.getRect(find.bySemanticsLabel('التقاط'));
+    expect(pill.width, closeTo(label.width + 2 * 16, 1), reason: 'its label and 16 either side, no more');
+    // Right to left: the pill sits at the bar's left edge (24 in), the shutter
+    // in the middle, with room between (the test font's square glyphs make the
+    // label far wider than on a phone).
+    expect(pill.left, closeTo(24, 1), reason: 'at the edge, not stretched toward the shutter');
+    expect(shutter.left - pill.right, greaterThan(0), reason: 'not up against the shutter');
+    await discard(t, from: find.text('مسح مستند'));
+  });
+
+  testWidgets('[UT] no «تدوير» on the corner step or on «توضيح الصفحات»', (WidgetTester t) async {
+    await t.pumpWidget(host((Future<DocScanResult?> _) {}));
+    await t.tap(find.text('scan'));
+    await settle(t, find.bySemanticsLabel('التقاط'));
+    await t.tap(find.bySemanticsLabel('التقاط'));
+    await settle(t, find.text('حفظ الصفحة'));
+    expect(find.bySemanticsLabel('تدوير'), findsNothing);
+    await t.tap(find.text('حفظ الصفحة'));
+    await settle(t, find.text('حفظ (1)'));
+    await t.tap(find.text('حفظ (1)'));
+    await settle(t, find.text('توضيح الصفحات'));
+    await frames(t);
+    expect(find.bySemanticsLabel('تدوير'), findsNothing);
+    await discard(t, from: find.text('توضيح الصفحات'));
   });
 
   testWidgets('[UT] a short pull springs back and keeps the scan', (WidgetTester t) async {

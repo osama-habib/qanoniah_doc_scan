@@ -206,7 +206,15 @@ void main() {
     if (only.contains('filters')) await shot('3_filters');
     await t.tap(find.text('التالي'));
     await until(find.bySemanticsLabel('معاينة'));
-    if (only.contains('review')) await shot('4_review');
+    if (only.contains('review')) {
+      await shot('4_review');
+      // «إضافة صفحة»: the camera from review, with its back and «حفظ (1)».
+      await t.tap(find.text('إضافة صفحة'));
+      await until(find.bySemanticsLabel('التقاط'));
+      await shot('4b_camera_from_review');
+      await t.tap(find.bySemanticsLabel('رجوع'));
+      await until(find.bySemanticsLabel('معاينة'));
+    }
     await t.tap(find.bySemanticsLabel('معاينة'));
     await until(find.bySemanticsLabel('معاينة ملف PDF'), tries: 400);
     if (only.contains('preview')) await shot('5_preview');

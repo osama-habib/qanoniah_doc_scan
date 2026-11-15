@@ -32,6 +32,9 @@ class ScanSessionRepo {
 
   ScanSession? _session;
 
+  /// True between [start] and [cancel] / [finish].
+  bool get active => _session != null;
+
   /// The active session. Only valid between [start] and [cancel] / [finish].
   ScanSession get session {
     final ScanSession? s = _session;
