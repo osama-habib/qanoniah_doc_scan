@@ -220,7 +220,8 @@ class _DocScanFlowState extends State<DocScanFlow> {
   String get _defaultStem => '${widget.strings.defaultFileStem}-${widget.config.fileNumber.toString().padLeft(2, '0')}';
 
   void _openCamera({String? replacing}) => setState(() {
-    _fromReview = _step == _Step.review || _step == _Step.filters;
+    // Back from «توضيح الصفحات» is the same camera again, not a visit from review.
+    _fromReview = _step == _Step.review;
     _pagesBeforeVisit = _sessions.session.pages.length;
     _replacing = replacing;
     _camera = widget.deps.newCamera();

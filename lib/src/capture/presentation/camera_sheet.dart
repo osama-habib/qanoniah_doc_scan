@@ -38,7 +38,8 @@ class CameraSheet extends StatefulWidget {
   final VoidCallback onCancel;
 
   /// Back to where the camera was opened from («إضافة صفحة» or a retake on
-  /// review). When set, it takes «إلغاء»'s place in the header.
+  /// review). When set, it takes «إلغاء»'s place in the header, until a page is
+  /// stored: «رجوع» then reopens that page.
   final VoidCallback? onBack;
 
   /// «مراجعة الصفحات»; also where the flow goes after a retake.
@@ -146,6 +147,20 @@ class _CameraSheetState extends State<CameraSheet> with WidgetsBindingObserver, 
     if (q != null) unawaited(cubit.keepAdjusted(q));
   }
 
+  /// The header's «رجوع», in place of «إلغاء»: on a reopened page, back to the
+  /// camera; once a page is stored, that page on the corner step; else back to
+  /// where the camera was opened from. Null keeps «إلغاء».
+  VoidCallback? _back(CaptureState st, CaptureCubit cubit) {
+    if (st.editingId != null) {
+      return () {
+        setState(() => _adjusted = null);
+        cubit.closeEdit();
+      };
+    }
+    if (st.adjustFile == null && st.lastStoredId != null) return cubit.reopenLast;
+    return widget.onBack;
+  }
+
   @override
   Widget build(BuildContext context) {
     final DocScanTheme t = DocScanTheme.of(context);
@@ -197,16 +212,17 @@ class _CameraSheetState extends State<CameraSheet> with WidgetsBindingObserver, 
                       ScanHeader(
                         title: s.scanTitle,
                         color: t.onCameraSurface,
-                        leading: widget.onBack == null
-                            ? _HeaderText(label: s.cancel, onTap: widget.onCancel)
-                            : ScanIconButton(
-                                icon: t.icons.back,
-                                label: s.back,
-                                mirrorInRtl: true,
-                                color: t.onCameraSurface,
-                                background: t.onCameraSurface.withValues(alpha: 0.12),
-                                onPressed: widget.onBack,
-                              ),
+                        leading: switch (_back(st, cubit)) {
+                          null => _HeaderText(label: s.cancel, onTap: widget.onCancel),
+                          final VoidCallback back => ScanIconButton(
+                            icon: t.icons.back,
+                            label: s.back,
+                            mirrorInRtl: true,
+                            color: t.onCameraSurface,
+                            background: t.onCameraSurface.withValues(alpha: 0.12),
+                            onPressed: back,
+                          ),
+                        },
                         // Hidden on a camera without a flash (z8y71x6uuw).
                         trailing: st.phase == CapturePhase.ready && st.hasFlash
                             ? _TorchButton(on: st.flash == ScanFlash.torch, strings: s, onTap: cubit.toggleTorch)

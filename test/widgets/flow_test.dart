@@ -244,7 +244,7 @@ void main() {
     expect(events.last.name, 'scan_cancelled');
   });
 
-  testWidgets('[UT] «إلغاء» with pages asks «تجاهل المسح؟»: keep goes on, discard closes with nothing (pk2)', (
+  testWidgets('[UT] closing with pages asks «تجاهل المسح؟»: keep goes on, discard closes with nothing (pk2)', (
     WidgetTester t,
   ) async {
     late Future<DocScanResult?> result;
@@ -252,7 +252,8 @@ void main() {
     await t.tap(find.text('scan'));
     await settle(t, find.bySemanticsLabel('التقاط'));
     await capturePage(t);
-    await t.tap(find.text('إلغاء'));
+    // Once a page is stored the header has «رجوع»; the pull-down closes.
+    await t.dragFrom(t.getCenter(find.text('مسح مستند')), const Offset(0, 300));
     await settle(t, find.text('تجاهل المسح؟'));
     await frames(t);
     // «متابعة المسح»: nothing is lost, the camera stays.
@@ -263,7 +264,7 @@ void main() {
     expect(sessionDirs(), hasLength(1));
     expect(events.map((DocScanEvent e) => e.name), isNot(contains('scan_cancelled')));
     // «تجاهل المسح»: the scan closes, nothing attached, no files left.
-    await t.tap(find.text('إلغاء'));
+    await t.dragFrom(t.getCenter(find.text('مسح مستند')), const Offset(0, 300));
     await settle(t, find.text('تجاهل المسح؟'));
     await frames(t);
     await t.tap(find.text('تجاهل المسح'));
@@ -271,6 +272,68 @@ void main() {
     expect(await outcome(t, result), isNull);
     expect(sessionDirs(), isEmpty);
     expect(events.last.name, 'scan_cancelled');
+  });
+
+  testWidgets('[IT] «إضافة صفحة» on «توضيح الصفحات» opens the camera with «إلغاء»: no back loop', (WidgetTester t) async {
+    await t.pumpWidget(host((Future<DocScanResult?> _) {}));
+    await t.tap(find.text('scan'));
+    await settle(t, find.bySemanticsLabel('التقاط'));
+    await capturePage(t);
+    await t.tap(find.text('حفظ (1)'));
+    await settle(t, find.text('توضيح الصفحات'));
+    await frames(t);
+    // Its header button, «إضافة صفحة», opens the camera again.
+    await t.tap(find.bySemanticsLabel('إضافة صفحة'));
+    await settle(t, find.bySemanticsLabel('التقاط'));
+    await frames(t);
+    expect(find.text('إلغاء'), findsOneWidget, reason: 'the camera it came from, not a visit from review');
+    expect(find.bySemanticsLabel('رجوع'), findsNothing);
+    expect(find.text('حفظ (1)'), findsOneWidget, reason: 'the page is kept');
+    await discard(t, from: find.text('مسح مستند'));
+  });
+
+  testWidgets('[IT] «رجوع» after «حفظ الصفحة» reopens that page: save replaces it, retake drops it', (
+    WidgetTester t,
+  ) async {
+    await t.pumpWidget(host((Future<DocScanResult?> _) {}));
+    await t.tap(find.text('scan'));
+    await settle(t, find.bySemanticsLabel('التقاط'));
+    await capturePage(t);
+    await frames(t);
+    // A page is stored: «رجوع» where «إلغاء» was.
+    expect(find.text('إلغاء'), findsNothing);
+    await t.tap(find.bySemanticsLabel('رجوع'));
+    await settle(t, find.text('حفظ الصفحة'));
+    await frames(t);
+    expect(find.text('إعادة الالتقاط'), findsOneWidget, reason: 'the corner step again');
+    // «رجوع» on it: back to the camera, the page as it was.
+    await t.tap(find.bySemanticsLabel('رجوع'));
+    await settle(t, find.text('حفظ (1)'));
+    await frames(t);
+    expect(find.text('حفظ الصفحة'), findsNothing);
+    // Reopened and saved: the same page, not a second one.
+    await t.tap(find.bySemanticsLabel('رجوع'));
+    await settle(t, find.text('حفظ الصفحة'));
+    await t.tap(find.text('حفظ الصفحة'));
+    await settle(t, find.text('حفظ (1)'));
+    // The page is prepared again on disk before «رجوع» can reopen it.
+    for (int i = 0; i < 10; i++) {
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      await t.pump(const Duration(milliseconds: 50));
+    }
+    expect(find.text('حفظ (2)'), findsNothing);
+    expect(events.where((DocScanEvent e) => e.name == 'scan_page_captured'), hasLength(1));
+    // Reopened and retaken: the page goes, the camera is back at its start.
+    await t.tap(find.bySemanticsLabel('رجوع'));
+    await settle(t, find.text('إعادة الالتقاط'));
+    await t.tap(find.text('إعادة الالتقاط'));
+    await settle(t, find.text('إلغاء'));
+    await frames(t);
+    expect(find.text('حفظ (1)'), findsNothing, reason: 'no page left');
+    expect(find.bySemanticsLabel('رجوع'), findsNothing);
+    await t.tap(find.text('إلغاء'));
+    await closed(t);
+    expect(sessionDirs(), isEmpty);
   });
 
   testWidgets('[UT] pulling the sheet down from any step closes the scan (pk2)', (WidgetTester t) async {

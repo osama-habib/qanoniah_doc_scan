@@ -45,6 +45,14 @@ mixin _$CaptureState {
   /// changed with «تدوير»).
   int get adjustTurns => throw _privateConstructorUsedError;
 
+  /// The stored page reopened on the corner step with «رجوع»: «حفظ الصفحة»
+  /// replaces it, «إعادة الالتقاط» drops it.
+  String? get editingId => throw _privateConstructorUsedError;
+
+  /// The last page stored on this camera visit: «رجوع» reopens it on the
+  /// corner step (owner, 2026-11-15).
+  String? get lastStoredId => throw _privateConstructorUsedError;
+
   /// The page being straightened on screen: its photo, corners and turns.
   /// [straightens] counts them, so each one plays once.
   File? get straightenFile => throw _privateConstructorUsedError;
@@ -71,16 +79,13 @@ mixin _$CaptureState {
   /// Create a copy of CaptureState
   /// with the given fields replaced by the non-null parameter values.
   @JsonKey(includeFromJson: false, includeToJson: false)
-  $CaptureStateCopyWith<CaptureState> get copyWith =>
-      throw _privateConstructorUsedError;
+  $CaptureStateCopyWith<CaptureState> get copyWith => throw _privateConstructorUsedError;
 }
 
 /// @nodoc
 abstract class $CaptureStateCopyWith<$Res> {
-  factory $CaptureStateCopyWith(
-    CaptureState value,
-    $Res Function(CaptureState) then,
-  ) = _$CaptureStateCopyWithImpl<$Res, CaptureState>;
+  factory $CaptureStateCopyWith(CaptureState value, $Res Function(CaptureState) then) =
+      _$CaptureStateCopyWithImpl<$Res, CaptureState>;
   @useResult
   $Res call({
     CapturePhase phase,
@@ -97,6 +102,8 @@ abstract class $CaptureStateCopyWith<$Res> {
     File? adjustFile,
     Quad? adjustQuad,
     int adjustTurns,
+    String? editingId,
+    String? lastStoredId,
     File? straightenFile,
     Quad? straightenQuad,
     int straightenTurns,
@@ -113,8 +120,7 @@ abstract class $CaptureStateCopyWith<$Res> {
 }
 
 /// @nodoc
-class _$CaptureStateCopyWithImpl<$Res, $Val extends CaptureState>
-    implements $CaptureStateCopyWith<$Res> {
+class _$CaptureStateCopyWithImpl<$Res, $Val extends CaptureState> implements $CaptureStateCopyWith<$Res> {
   _$CaptureStateCopyWithImpl(this._value, this._then);
 
   // ignore: unused_field
@@ -141,6 +147,8 @@ class _$CaptureStateCopyWithImpl<$Res, $Val extends CaptureState>
     Object? adjustFile = freezed,
     Object? adjustQuad = freezed,
     Object? adjustTurns = null,
+    Object? editingId = freezed,
+    Object? lastStoredId = freezed,
     Object? straightenFile = freezed,
     Object? straightenQuad = freezed,
     Object? straightenTurns = null,
@@ -208,6 +216,14 @@ class _$CaptureStateCopyWithImpl<$Res, $Val extends CaptureState>
                 ? _value.adjustTurns
                 : adjustTurns // ignore: cast_nullable_to_non_nullable
                       as int,
+            editingId: freezed == editingId
+                ? _value.editingId
+                : editingId // ignore: cast_nullable_to_non_nullable
+                      as String?,
+            lastStoredId: freezed == lastStoredId
+                ? _value.lastStoredId
+                : lastStoredId // ignore: cast_nullable_to_non_nullable
+                      as String?,
             straightenFile: freezed == straightenFile
                 ? _value.straightenFile
                 : straightenFile // ignore: cast_nullable_to_non_nullable
@@ -289,12 +305,9 @@ class _$CaptureStateCopyWithImpl<$Res, $Val extends CaptureState>
 }
 
 /// @nodoc
-abstract class _$$CaptureStateImplCopyWith<$Res>
-    implements $CaptureStateCopyWith<$Res> {
-  factory _$$CaptureStateImplCopyWith(
-    _$CaptureStateImpl value,
-    $Res Function(_$CaptureStateImpl) then,
-  ) = __$$CaptureStateImplCopyWithImpl<$Res>;
+abstract class _$$CaptureStateImplCopyWith<$Res> implements $CaptureStateCopyWith<$Res> {
+  factory _$$CaptureStateImplCopyWith(_$CaptureStateImpl value, $Res Function(_$CaptureStateImpl) then) =
+      __$$CaptureStateImplCopyWithImpl<$Res>;
   @override
   @useResult
   $Res call({
@@ -312,6 +325,8 @@ abstract class _$$CaptureStateImplCopyWith<$Res>
     File? adjustFile,
     Quad? adjustQuad,
     int adjustTurns,
+    String? editingId,
+    String? lastStoredId,
     File? straightenFile,
     Quad? straightenQuad,
     int straightenTurns,
@@ -331,13 +346,10 @@ abstract class _$$CaptureStateImplCopyWith<$Res>
 }
 
 /// @nodoc
-class __$$CaptureStateImplCopyWithImpl<$Res>
-    extends _$CaptureStateCopyWithImpl<$Res, _$CaptureStateImpl>
+class __$$CaptureStateImplCopyWithImpl<$Res> extends _$CaptureStateCopyWithImpl<$Res, _$CaptureStateImpl>
     implements _$$CaptureStateImplCopyWith<$Res> {
-  __$$CaptureStateImplCopyWithImpl(
-    _$CaptureStateImpl _value,
-    $Res Function(_$CaptureStateImpl) _then,
-  ) : super(_value, _then);
+  __$$CaptureStateImplCopyWithImpl(_$CaptureStateImpl _value, $Res Function(_$CaptureStateImpl) _then)
+    : super(_value, _then);
 
   /// Create a copy of CaptureState
   /// with the given fields replaced by the non-null parameter values.
@@ -358,6 +370,8 @@ class __$$CaptureStateImplCopyWithImpl<$Res>
     Object? adjustFile = freezed,
     Object? adjustQuad = freezed,
     Object? adjustTurns = null,
+    Object? editingId = freezed,
+    Object? lastStoredId = freezed,
     Object? straightenFile = freezed,
     Object? straightenQuad = freezed,
     Object? straightenTurns = null,
@@ -425,6 +439,14 @@ class __$$CaptureStateImplCopyWithImpl<$Res>
             ? _value.adjustTurns
             : adjustTurns // ignore: cast_nullable_to_non_nullable
                   as int,
+        editingId: freezed == editingId
+            ? _value.editingId
+            : editingId // ignore: cast_nullable_to_non_nullable
+                  as String?,
+        lastStoredId: freezed == lastStoredId
+            ? _value.lastStoredId
+            : lastStoredId // ignore: cast_nullable_to_non_nullable
+                  as String?,
         straightenFile: freezed == straightenFile
             ? _value.straightenFile
             : straightenFile // ignore: cast_nullable_to_non_nullable
@@ -480,6 +502,8 @@ class _$CaptureStateImpl implements _CaptureState {
     this.adjustFile,
     this.adjustQuad,
     this.adjustTurns = 0,
+    this.editingId,
+    this.lastStoredId,
     this.straightenFile,
     this.straightenQuad,
     this.straightenTurns = 0,
@@ -538,6 +562,16 @@ class _$CaptureStateImpl implements _CaptureState {
   @JsonKey()
   final int adjustTurns;
 
+  /// The stored page reopened on the corner step with «رجوع»: «حفظ الصفحة»
+  /// replaces it, «إعادة الالتقاط» drops it.
+  @override
+  final String? editingId;
+
+  /// The last page stored on this camera visit: «رجوع» reopens it on the
+  /// corner step (owner, 2026-11-15).
+  @override
+  final String? lastStoredId;
+
   /// The page being straightened on screen: its photo, corners and turns.
   /// [straightens] counts them, so each one plays once.
   @override
@@ -577,7 +611,7 @@ class _$CaptureStateImpl implements _CaptureState {
 
   @override
   String toString() {
-    return 'CaptureState(phase: $phase, mode: $mode, quad: $quad, hint: $hint, pageCount: $pageCount, capturing: $capturing, shots: $shots, lastThumbnail: $lastThumbnail, limitReached: $limitReached, storageFull: $storageFull, replaced: $replaced, adjustFile: $adjustFile, adjustQuad: $adjustQuad, adjustTurns: $adjustTurns, straightenFile: $straightenFile, straightenQuad: $straightenQuad, straightenTurns: $straightenTurns, straightens: $straightens, flash: $flash, hasFlash: $hasFlash, idle: $idle, cameraOff: $cameraOff)';
+    return 'CaptureState(phase: $phase, mode: $mode, quad: $quad, hint: $hint, pageCount: $pageCount, capturing: $capturing, shots: $shots, lastThumbnail: $lastThumbnail, limitReached: $limitReached, storageFull: $storageFull, replaced: $replaced, adjustFile: $adjustFile, adjustQuad: $adjustQuad, adjustTurns: $adjustTurns, editingId: $editingId, lastStoredId: $lastStoredId, straightenFile: $straightenFile, straightenQuad: $straightenQuad, straightenTurns: $straightenTurns, straightens: $straightens, flash: $flash, hasFlash: $hasFlash, idle: $idle, cameraOff: $cameraOff)';
   }
 
   @override
@@ -589,39 +623,26 @@ class _$CaptureStateImpl implements _CaptureState {
             (identical(other.mode, mode) || other.mode == mode) &&
             (identical(other.quad, quad) || other.quad == quad) &&
             (identical(other.hint, hint) || other.hint == hint) &&
-            (identical(other.pageCount, pageCount) ||
-                other.pageCount == pageCount) &&
-            (identical(other.capturing, capturing) ||
-                other.capturing == capturing) &&
+            (identical(other.pageCount, pageCount) || other.pageCount == pageCount) &&
+            (identical(other.capturing, capturing) || other.capturing == capturing) &&
             (identical(other.shots, shots) || other.shots == shots) &&
-            (identical(other.lastThumbnail, lastThumbnail) ||
-                other.lastThumbnail == lastThumbnail) &&
-            (identical(other.limitReached, limitReached) ||
-                other.limitReached == limitReached) &&
-            (identical(other.storageFull, storageFull) ||
-                other.storageFull == storageFull) &&
-            (identical(other.replaced, replaced) ||
-                other.replaced == replaced) &&
-            (identical(other.adjustFile, adjustFile) ||
-                other.adjustFile == adjustFile) &&
-            (identical(other.adjustQuad, adjustQuad) ||
-                other.adjustQuad == adjustQuad) &&
-            (identical(other.adjustTurns, adjustTurns) ||
-                other.adjustTurns == adjustTurns) &&
-            (identical(other.straightenFile, straightenFile) ||
-                other.straightenFile == straightenFile) &&
-            (identical(other.straightenQuad, straightenQuad) ||
-                other.straightenQuad == straightenQuad) &&
-            (identical(other.straightenTurns, straightenTurns) ||
-                other.straightenTurns == straightenTurns) &&
-            (identical(other.straightens, straightens) ||
-                other.straightens == straightens) &&
+            (identical(other.lastThumbnail, lastThumbnail) || other.lastThumbnail == lastThumbnail) &&
+            (identical(other.limitReached, limitReached) || other.limitReached == limitReached) &&
+            (identical(other.storageFull, storageFull) || other.storageFull == storageFull) &&
+            (identical(other.replaced, replaced) || other.replaced == replaced) &&
+            (identical(other.adjustFile, adjustFile) || other.adjustFile == adjustFile) &&
+            (identical(other.adjustQuad, adjustQuad) || other.adjustQuad == adjustQuad) &&
+            (identical(other.adjustTurns, adjustTurns) || other.adjustTurns == adjustTurns) &&
+            (identical(other.editingId, editingId) || other.editingId == editingId) &&
+            (identical(other.lastStoredId, lastStoredId) || other.lastStoredId == lastStoredId) &&
+            (identical(other.straightenFile, straightenFile) || other.straightenFile == straightenFile) &&
+            (identical(other.straightenQuad, straightenQuad) || other.straightenQuad == straightenQuad) &&
+            (identical(other.straightenTurns, straightenTurns) || other.straightenTurns == straightenTurns) &&
+            (identical(other.straightens, straightens) || other.straightens == straightens) &&
             (identical(other.flash, flash) || other.flash == flash) &&
-            (identical(other.hasFlash, hasFlash) ||
-                other.hasFlash == hasFlash) &&
+            (identical(other.hasFlash, hasFlash) || other.hasFlash == hasFlash) &&
             (identical(other.idle, idle) || other.idle == idle) &&
-            (identical(other.cameraOff, cameraOff) ||
-                other.cameraOff == cameraOff));
+            (identical(other.cameraOff, cameraOff) || other.cameraOff == cameraOff));
   }
 
   @override
@@ -641,6 +662,8 @@ class _$CaptureStateImpl implements _CaptureState {
     adjustFile,
     adjustQuad,
     adjustTurns,
+    editingId,
+    lastStoredId,
     straightenFile,
     straightenQuad,
     straightenTurns,
@@ -676,6 +699,8 @@ abstract class _CaptureState implements CaptureState {
     final File? adjustFile,
     final Quad? adjustQuad,
     final int adjustTurns,
+    final String? editingId,
+    final String? lastStoredId,
     final File? straightenFile,
     final Quad? straightenQuad,
     final int straightenTurns,
@@ -728,6 +753,16 @@ abstract class _CaptureState implements CaptureState {
   @override
   int get adjustTurns;
 
+  /// The stored page reopened on the corner step with «رجوع»: «حفظ الصفحة»
+  /// replaces it, «إعادة الالتقاط» drops it.
+  @override
+  String? get editingId;
+
+  /// The last page stored on this camera visit: «رجوع» reopens it on the
+  /// corner step (owner, 2026-11-15).
+  @override
+  String? get lastStoredId;
+
   /// The page being straightened on screen: its photo, corners and turns.
   /// [straightens] counts them, so each one plays once.
   @override
@@ -763,6 +798,5 @@ abstract class _CaptureState implements CaptureState {
   /// with the given fields replaced by the non-null parameter values.
   @override
   @JsonKey(includeFromJson: false, includeToJson: false)
-  _$$CaptureStateImplCopyWith<_$CaptureStateImpl> get copyWith =>
-      throw _privateConstructorUsedError;
+  _$$CaptureStateImplCopyWith<_$CaptureStateImpl> get copyWith => throw _privateConstructorUsedError;
 }

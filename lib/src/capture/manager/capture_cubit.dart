@@ -53,6 +53,14 @@ abstract class CaptureState with _$CaptureState {
     /// changed with «تدوير»).
     @Default(0) int adjustTurns,
 
+    /// The stored page reopened on the corner step with «رجوع»: «حفظ الصفحة»
+    /// replaces it, «إعادة الالتقاط» drops it.
+    String? editingId,
+
+    /// The last page stored on this camera visit: «رجوع» reopens it on the
+    /// corner step (owner, 2026-11-15).
+    String? lastStoredId,
+
     /// The page being straightened on screen: its photo, corners and turns.
     /// [straightens] counts them, so each one plays once.
     File? straightenFile,
@@ -294,16 +302,39 @@ class CaptureCubit extends Cubit<CaptureState> {
     );
   }
 
-  /// «حفظ الصفحة» on the corner step.
+  /// «حفظ الصفحة» on the corner step; on a reopened page it replaces that page.
   Future<void> keepAdjusted(Quad corners) async {
     final File? raw = state.adjustFile;
     if (raw == null || state.capturing) return;
     _stillHere();
     final int turns = state.adjustTurns;
-    emit(state.copyWith(capturing: true, adjustFile: null, adjustQuad: null, adjustTurns: 0));
+    final String? editing = state.editingId;
+    emit(state.copyWith(capturing: true, adjustFile: null, adjustQuad: null, adjustTurns: 0, editingId: null));
     _onScreen();
     _straighten(raw, corners, turns);
-    await _store(raw, corners, turns);
+    await _store(raw, corners, turns, editing: editing);
+  }
+
+  /// «رجوع» once a page is stored: that page on the corner step again, with
+  /// its photo, corners and turns as they were saved.
+  void reopenLast() {
+    final String? id = state.lastStoredId;
+    if (id == null || state.capturing || state.adjustFile != null) return;
+    final CapturedPage? page = _sessions.session.pages.where((CapturedPage p) => p.id == id).firstOrNull;
+    if (page == null) return emit(state.copyWith(lastStoredId: null));
+    _stillHere();
+    // Its turns are the saved ones; nothing found later may change them.
+    _rotatedByHand = true;
+    emit(state.copyWith(adjustFile: page.rawFile, adjustQuad: page.corners, adjustTurns: page.turns, editingId: id));
+    _offScreen();
+  }
+
+  /// «رجوع» on a reopened page: the camera again, the page as it was.
+  void closeEdit() {
+    if (state.editingId == null) return;
+    _stillHere();
+    emit(state.copyWith(adjustFile: null, adjustQuad: null, adjustTurns: 0, editingId: null));
+    _onScreen();
   }
 
   void _straighten(File raw, Quad corners, int turns) => emit(
@@ -349,13 +380,16 @@ class CaptureCubit extends Cubit<CaptureState> {
   /// longer apply.
   bool _rotatedByHand = false;
 
-  /// «إعادة الالتقاط» on the corner step: the photo is dropped.
+  /// «إعادة الالتقاط» on the corner step: the photo is dropped; on a reopened
+  /// page the page goes with it, and the next shot takes its place at the end.
   Future<void> retakeAdjusted() async {
     final File? raw = state.adjustFile;
     if (raw == null) return;
     _stillHere();
-    emit(state.copyWith(adjustFile: null, adjustQuad: null, adjustTurns: 0));
+    final String? editing = state.editingId;
+    emit(state.copyWith(adjustFile: null, adjustQuad: null, adjustTurns: 0, editingId: null));
     _onScreen();
+    if (editing != null) return _drop(editing);
     try {
       await raw.delete();
     } on FileSystemException catch (_) {}
@@ -377,7 +411,26 @@ class CaptureCubit extends Cubit<CaptureState> {
     return raw;
   }
 
-  Future<void> _store(File raw, Quad corners, int turns) async {
+  /// Removes a reopened page from the session, its files with it.
+  Future<void> _drop(String id) async {
+    final Either<StorageFailure, ScanSession> r = await _sessions.removePage(id);
+    if (isClosed) return;
+    r.fold((StorageFailure _) => emit(state.copyWith(storageFull: true)), (ScanSession s) {
+      emit(
+        state.copyWith(
+          pageCount: s.pages.length,
+          lastThumbnail: s.pages.isEmpty ? null : s.pages.last.preparedFile,
+          lastStoredId: null,
+          limitReached: _atLimit(s),
+          hint: s.pages.isEmpty ? _idleHint(state.mode) : state.hint,
+        ),
+      );
+    });
+  }
+
+  /// Stores a page: a new one, the retake's replacement ([replacePageId]), or
+  /// the reopened page [editing] with its new corners.
+  Future<void> _store(File raw, Quad corners, int turns, {String? editing}) async {
     final File prepared = _sessions.newFile('jpg');
     final File ocr = _sessions.newFile('png');
     final Either<StorageFailure, Unit> ok = await _preparer.prepare(
@@ -391,7 +444,7 @@ class CaptureCubit extends Cubit<CaptureState> {
     if (isClosed) return;
     if (ok.isLeft()) return emit(state.copyWith(capturing: false, storageFull: true));
 
-    final String? replacing = replacePageId;
+    final String? replacing = editing ?? replacePageId;
     final CapturedPage page = CapturedPage(
       id: replacing ?? _sessions.newPageId(),
       rawFile: raw,
@@ -405,7 +458,7 @@ class CaptureCubit extends Cubit<CaptureState> {
     if (replacing != null) {
       final Either<StorageFailure, ScanSession> r = await _sessions.replacePage(page);
       if (r.isLeft()) return emit(state.copyWith(capturing: false, storageFull: true));
-      _onEvent(DocScanEvent.pageRetaken());
+      if (editing == null) _onEvent(DocScanEvent.pageRetaken());
     } else {
       _sessions.addPage(page);
     }
@@ -416,7 +469,7 @@ class CaptureCubit extends Cubit<CaptureState> {
     _capturedSignature = _lastSignature;
     _armed = false;
     _resetSteady();
-    _onEvent(DocScanEvent.pageCaptured(mode: state.mode, pageCount: s.pages.length));
+    if (editing == null) _onEvent(DocScanEvent.pageCaptured(mode: state.mode, pageCount: s.pages.length));
     final bool limit = replacing == null && _atLimit(s);
     if (limit) _onEvent(DocScanEvent.pageLimitReached(maxPages: s.maxPages!));
     emit(
@@ -427,7 +480,8 @@ class CaptureCubit extends Cubit<CaptureState> {
         lastThumbnail: prepared,
         hint: state.mode == CaptureMode.auto ? CaptureHint.nextPage : CaptureHint.manual,
         limitReached: limit,
-        replaced: replacing != null,
+        replaced: replacePageId != null,
+        lastStoredId: replacePageId == null ? page.id : null,
       ),
     );
   }
